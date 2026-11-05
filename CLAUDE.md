@@ -2,12 +2,12 @@
 
 Native PC and Switch port of Crazy Taxi 3: High Roller (original Xbox, NTSC-U, title 53450004, XDK 4531) via
 xboxrecomp static recompilation (x86 to C). The repo started as a copy of sheroes-nx (FurryLilManChild/sheroes-nx,
-Crazy Taxi 3, 0.2.0), itself a copy of CoD-nx (FurryLilManChild/cod-nx), both built on antoxa2584x/burnout3-sw (MIT):
+Sonic Heroes, 0.2.0), itself a copy of CoD-nx (FurryLilManChild/cod-nx), both built on antoxa2584x/burnout3-sw (MIT):
 its vendored xboxrecomp (the NFS Switch fork: NV2A Vulkan and OpenGL renderers, Horizon support), `src/main.c`,
 `src/switch_nx.c`, `src/switch_saltynx.c`, `switch/build.sh` and `tools/regen.sh`. Do not copy code from nfsu1-sw or
 nfsu2-sw: they have no license.
 
-The big difference from the earlier Xbox ports: Crazy Taxi 3 links XDK 1.0.4531, older than Crazy Taxi 3 (5659) and
+The big difference from the earlier Xbox ports: Crazy Taxi 3 links XDK 1.0.4531, older than Sonic Heroes (5659) and
 CoD-nx and Burnout 3 (5849). None of their D3D and DirectSound hooks carry over by address; sheroes-nx's set is kept
 for reference in `docs/hooks-from-sheroes-5659.c.txt`, to be found again here. The kernel may need an ordinal remap
 (`xboxrecomp/tools/kernel_audit/gen_ordinal_remap.py`; Halo's 3911 and Crimson Skies' 5659 needed none). The engine
