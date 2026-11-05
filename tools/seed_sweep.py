@@ -44,8 +44,8 @@ def main():
     ap.add_argument("functions")
     ap.add_argument("--log", action="append", default=[])
     ap.add_argument("--seeds", default=None)
-    ap.add_argument("--code", default=".text,D3D,DSOUND,XGRPH,XPP,D3DX,PSFD00,PSFD_I,PSFD_B,PSFD_P,DOLBY")
-    ap.add_argument("--libs", default="D3D,DSOUND,XGRPH,XPP,D3DX,PSFD00,PSFD_I,PSFD_B,PSFD_P")
+    ap.add_argument("--code", default=".text,D3D,DSOUND,XGRPH,XPP,PSGSFD00,PSGSFD_I,PSGSFD_B,PSGSFD_P,DOLBY")
+    ap.add_argument("--libs", default="D3D,DSOUND,XGRPH,XPP,PSGSFD00,PSGSFD_I,PSGSFD_B,PSGSFD_P")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
 
@@ -157,11 +157,17 @@ def main():
                     + (", its address appears in the image" if va in refs else ""))
 
     # imm
-    for s in code:
-        for ins in md.disasm(d[s["raw"]:s["raw"] + s["rsize"]], s["va"]):
+    # CT3-nx: walk each known function, not each section in one pass: capstone's linear sweep stops at the
+    # first byte it cannot decode, and in CT3's XBE that is early in every section (0 hits before this fix).
+    def fn_ins():
+        for fs, fe in ranges:
+            if sec_of(fs):
+                yield from md.disasm(raw(fs, fe - fs), fs)
+    for _ in (0,):
+        for ins in fn_ins():
             if ins.mnemonic not in ("push", "mov"):
                 continue
-            m = re.search(r"0x([0-9a-f]{6,8})\b", ins.op_str)
+            m = re.search(r"0x([0-9a-f]{5,8})\b", ins.op_str)  # CT3-nx: {5,}: code here sits below 0x100000
             if not m or "[" in ins.op_str.split(",")[-1]:
                 continue
             va = int(m.group(1), 16)

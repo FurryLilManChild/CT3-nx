@@ -10,7 +10,7 @@ from capstone import *
 d,secs=load_xbe('assets/game_root/default.xbe')
 md=Cs(CS_ARCH_X86,CS_MODE_32)
 S={s['name']:s for s in secs}
-codes=[S[n] for n in ('.text','D3D','DSOUND','PSFD00','PSFD_I','PSFD_B','PSFD_P','DOLPHIN','D3DX','XGRPH','XPP')]
+codes=[S[n] for n in ('.text','D3D','DSOUND','PSGSFD00','PSGSFD_I','PSGSFD_B','PSGSFD_P','XGRPH','XPP') if n in S]
 def csec(v):
     for s in codes:
         if s['va']<=v<s['va']+s['rsize']: return s

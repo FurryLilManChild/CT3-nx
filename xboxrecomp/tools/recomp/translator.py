@@ -3437,6 +3437,14 @@ class BatchTranslator:
                 "",
                 "#define RECOMP_GENERATED_CODE",
                 f'#include "{header_name}"',
+                "#include <stdio.h>",
+                "",
+                "/* CT3-nx: each stub says once that it ran, with its caller's return",
+                " * address, so a run log names the live ones (a silent stub skips",
+                " * real game code). */",
+                "#define RECOMP_STUB_HIT(va) do { static int hit_; if (!hit_) { hit_ = 1; \\",
+                "    fprintf(stderr, \"[STUB] unresolved 0x%08X entered from 0x%08X\\n\", \\",
+                "            (unsigned)(va), (unsigned)MEM32(g_esp)); } } while (0)",
                 "",
             ]
             stub_lines.append(
@@ -3460,7 +3468,7 @@ class BatchTranslator:
                 popped = self.translator._stub_ret_bytes(addr)
                 note = (f"ret {popped}" if popped else "not detected")
                 stub_lines.append(
-                    f"void {unresolved[addr]}(void) {{ g_esp += {4 + popped}; "
+                    f"void {unresolved[addr]}(void) {{ RECOMP_STUB_HIT(0x{addr:08X}u); g_esp += {4 + popped}; "
                     f"/* 0x{addr:08X}: {note} */ }}"
                 )
             stub_lines.append("")

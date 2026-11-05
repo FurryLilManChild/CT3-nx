@@ -58,9 +58,214 @@ typedef void (*recomp_func_t)(void);
  *
  * CT3-nx. Crazy Taxi 3 links XDK 1.0.4531 (Sonic Heroes 5659, CoD-nx and
  * Burnout 3 5849), so none of the earlier hooks carry over by address. The
- * sheroes-nx versions are in docs/hooks-from-sheroes-5659.c.txt; each is
- * added back here once found in this XBE's D3D and DSOUND sections, with its
- * evidence. */
+ * sheroes-nx versions are in docs/hooks-from-sheroes-5659.c.txt; each one
+ * below was found again in this XBE's D3D and DSOUND sections with capstone
+ * on 2026-11-05 (kickoff), with its evidence. Same library functions as
+ * 5659, at older addresses and, in D3D, with device and display-block fields
+ * moved by a few bytes.
+ *
+ * Not needed: CoD's per-frame DSP heartbeat. 4531's DSOUND has no 0xCCCCCC
+ * anywhere; its only 10 ms stall (push 0x2710 at 0x0010E202, in
+ * sub_0010E1F0) is reached once, from DirectSound init (caller 0x0010E69B). */
+
+/* ── D3D fence wait, BlockOnTime (0x000F86C0) ─────────────────
+ *
+ * Stdcall (fence at [esp+4], flags at [esp+8], ret 8). The device is the
+ * global 0x001051D0 (94 reads in D3D; its +0 and +4 are the push buffer's
+ * put and end pointers, as in sub_000F71C0). The body reads [dev+0x34]
+ * (pointer to the GPU's completion semaphore) and [dev+0x30] (write
+ * sequence): 5659 had them at +0x30 and +0x2C. It spins on the semaphore
+ * (0x000F8770-0x000F8778) or waits on the event at dev+0x2458 with
+ * KeWaitForSingleObject (0x000F8799). Callers 0x000F5240, 0x000F87B0,
+ * 0x000F8990, 0x000F89B0, 0x000F94B0. */
+#define CT3_D3D_DEVICE_PTR 0x001051D0u
+extern void nv2a_pb_set_semaphore_target(uint32_t guest_va);
+extern void sub_000F86C0_gen(void);
+
+void sub_000F86C0(void)
+{
+    static int exec = -1;
+    uint32_t dev = MEM32(CT3_D3D_DEVICE_PTR);
+    uint32_t sem = dev ? MEM32(dev + 0x34) : 0;
+
+    if (exec < 0)
+        exec = getenv("RECOMP_PB_EXEC") != NULL;
+    if (exec) {
+        static uint32_t registered;
+        if (sem && sem != registered) {
+            nv2a_pb_set_semaphore_target(sem);
+            fprintf(stderr, "[D3D] GPU semaphore at 0x%08X\n", sem);
+            registered = sem;
+        }
+        sub_000F86C0_gen();
+        return;
+    }
+    if (sem)
+        MEM32(sem) = MEM32(dev + 0x30);     /* "GPU" is always caught up */
+    eax = 0;
+    esp += 4 + 8;                           /* return address, fence, flags */
+}
+
+/* ── DirectSound DSP command post (0x00109068) ───────────────
+ *
+ * sheroes-nx's sub_0034175A, the same body: thiscall, ebx =
+ * ***(this + 8 + 0x10) is the GP DSP's scratch area (0x00109073-0x00109079),
+ * the command (3) goes to scratch + 0x810 and it spins until the DSP zeroes
+ * it (0x001091C5: add ebx,0x810; 0x001091CD: mov [ebx],eax; 0x001091CF:
+ * cmp [ebx],0; jne 0x001091CF). There is no DSP, so the word is registered
+ * with the runtime's completion list first. Found by searching DSOUND for
+ * 0x810 (one hit). One caller, 0x001092D5. */
+extern int xbox_ApuDspAckWord(uint32_t va);
+extern void sub_00109068_gen(void);
+
+void sub_00109068(void)
+{
+    uint32_t obj = MEM32(ecx + 8);
+    uint32_t blk = obj ? MEM32(obj + 0x10) : 0;
+    uint32_t scratch = blk ? MEM32(blk) : 0;
+
+    if (scratch)
+        xbox_ApuDspAckWord(scratch + 0x810);
+    sub_00109068_gen();
+}
+
+/* ── DirectSound AC'97 channel reset (0x0010E9E8) ────────────
+ *
+ * sheroes-nx's sub_00346F4D, the same body. Found by searching DSOUND for
+ * the NABM control byte 0xFEC0010B: it sets RR (2) in the channel's control
+ * byte (0xFEC0010B + table[0x00122BA8 + 4 * channel], 0x0010EA05), re-reads
+ * it once and spins on the copy (0x0010EA1B-0x0010EA20: and cl,2; test cl,cl;
+ * jne 0x0010EA1E), so with no controller it never leaves. This is the same
+ * function with the reset completing at once. Lock: the stack object's
+ * constructor 0x0010947B (ecx = frame - 8); then 0x0010E7F2 (four pushes)
+ * and the destructor 0x001094AE. Callers 0x001097FC, 0x0010EA5A,
+ * 0x0010EAA8, 0x0010EB02. */
+void sub_0010E9E8(void)
+{
+    uint32_t ebp_saved = g_ebp, frame, chan, nabm;
+
+    PUSH32(esp, ebp_saved);
+    frame = esp;
+    g_ebp = frame;
+    g_seh_ebp = frame;
+    esp -= 8;
+    MEM32(frame - 4) = 0;
+    PUSH32(esp, esi);
+    esi = ecx;
+    chan = esi;
+
+    ecx = frame - 8;
+    PUSH32(esp, 0x0010E9FCu); RECOMP_ABI_CALL(0x0010947Bu, sub_0010947B);
+
+    nabm = MEM32(MEM32(chan) * 4 + 0x00122BA8u);
+    MEM8(nabm + 0xFEC0010Bu) = 2;
+    MEM8(nabm + 0xFEC0010Bu) &= (uint8_t)~2u;   /* reset complete */
+    eax = nabm;
+    SET_LO8(ecx, 0);
+
+    MEM32(nabm + 0xFEC00100u) = MEM32(chan + 0x1C);
+    if (MEM32(chan) == 1)
+        MEM32(0xFEC0017Cu) = MEM32(chan + 0x28);
+
+    PUSH32(esp, 1);
+    PUSH32(esp, 1);
+    ecx = chan;
+    PUSH32(esp, MEM8(chan + 0x24));
+    PUSH32(esp, MEM8(chan + 0x25));
+    eax = MEM8(chan + 0x25);
+    g_ebp = frame;
+    g_seh_ebp = frame;
+    PUSH32(esp, 0x0010EA4Fu); RECOMP_ABI_CALL(0x0010E7F2u, sub_0010E7F2);
+
+    ecx = frame - 8;
+    g_ebp = frame;
+    g_seh_ebp = frame;
+    PUSH32(esp, 0x0010EA57u); RECOMP_ABI_CALL(0x001094AEu, sub_001094AE);
+
+    POP32(esp, esi);
+    esp = frame;
+    POP32(esp, ebp_saved);
+    g_ebp = ebp_saved;
+    esp += 4;
+}
+
+/* ── D3D vblank and PGRAPH handlers (0x000FBF50, 0x000FC470) ──
+ *
+ * sheroes-nx's hooks for its 0x003324D0 / 0x00332A40. D3D init sub_000FCD4D
+ * calls KeInitializeDpc (0x000FCD64) with the DPC 0x000FC6E0 and
+ * KeInitializeInterrupt (0x000FCDEC) with the routine 0x000FBDB0 on vector 3
+ * (both seeded: only their addresses are pushed). The DPC reads PMC_INTR
+ * ([ebp+0x100]) and calls the PGRAPH handler 0x000FC470 (bit 0x1000,
+ * 0x000FC702) and the vblank handler 0x000FBF50 (bit 0x1000000, 0x000FC733),
+ * both thiscall with ecx = the display block whose +0 is the register base.
+ * 4531's block differs from 5659's: the flip retire count is +0x1F4 (5659
+ * +0x1BC; incremented by the flip-retire routine 0x000FBED0 at 0x000FBF27),
+ * the vblank count +0x1F8 (0x000FBF9F), the pending flips at +0x1B4 +
+ * 8 * slot. Both run at DISPATCH_LEVEL so they cannot interleave with D3D's
+ * own busy-waits; the PGRAPH handler (reads NSOURCE [0x400108] at
+ * 0x000FC490, as 5659) takes the executor's trap under its lock; retired
+ * flips go to the executor's FLIP_STALL. */
+#define CT3_FLIP_RETIRED 0x1F4u
+extern uint8_t xbox_KfRaiseIrql(uint8_t irql);
+extern void xbox_KfLowerIrql(uint8_t irql);
+extern uint8_t xbox_CurrentIrql(void);
+extern int xbox_gil_suspend(void);
+extern void xbox_gil_resume(int depth);
+extern void xbox_Nv2aVblankTaken(void);
+extern void nv2a_pb_flip_retired(unsigned n);
+extern void nv2a_pb_trap_lock(void);
+extern void nv2a_pb_trap_unlock(void);
+extern void nv2a_pb_trap_taken(void);
+extern void sub_000FBF50_gen(void);
+extern void sub_000FC470_gen(void);
+
+static uint8_t d3d_isr_enter(void)
+{
+    uint8_t old = xbox_CurrentIrql();
+
+    if (old < 2) {
+        int d = xbox_gil_suspend();
+        old = xbox_KfRaiseIrql(2);
+        xbox_gil_resume(d);
+    }
+    return old;
+}
+
+static void d3d_isr_leave(uint8_t old)
+{
+    if (old < 2)
+        xbox_KfLowerIrql(old);
+}
+
+void sub_000FBF50(void)
+{
+    uint32_t blk = ecx;
+    uint8_t old = d3d_isr_enter();
+    uint32_t head = MEM32(blk + CT3_FLIP_RETIRED);
+
+    xbox_Nv2aVblankTaken();
+    sub_000FBF50_gen();
+    nv2a_pb_flip_retired(MEM32(blk + CT3_FLIP_RETIRED) - head);
+    d3d_isr_leave(old);
+}
+
+void sub_000FC470(void)
+{
+    volatile uint32_t *nv = (volatile uint32_t *)XBOX_PTR(0xFD000000u);
+    uint32_t blk = ecx;
+    uint8_t old = d3d_isr_enter();
+    uint32_t head = MEM32(blk + CT3_FLIP_RETIRED);
+    uint32_t nsource;
+
+    nv2a_pb_trap_lock();
+    nsource = nv[0x400108 / 4];
+    sub_000FC470_gen();
+    nv2a_pb_flip_retired(MEM32(blk + CT3_FLIP_RETIRED) - head);
+    if (nsource)
+        nv2a_pb_trap_taken();
+    nv2a_pb_trap_unlock();
+    d3d_isr_leave(old);
+}
 
 /* ── Manual function overrides ─────────────────────────────── */
 
