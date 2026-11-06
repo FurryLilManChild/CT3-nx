@@ -10435,7 +10435,65 @@ static void kernel_thunk_dispatch(void)
     xbox_gil_resume(gil);
 }
 
+/* CT3-nx: what each guest thread is doing in the kernel, readable from
+ * another thread (a stuck lock's report names what its holder is doing). One
+ * entry per thread, keyed by the address of a thread-local variable. */
+typedef struct { uintptr_t key; volatile uint32_t ordinal, ret, esp, in_call; volatile ULONGLONG since; } KThreadNow;
+static KThreadNow s_know[64];
+static RECOMP_TLS char t_know_key;
+static RECOMP_TLS KThreadNow *t_know;
+uintptr_t xbox_thread_key(void) { return (uintptr_t)&t_know_key; }
+static KThreadNow *know_self(void)
+{
+    if (!t_know) {
+        int i;
+        for (i = 0; i < 64; i++) {
+            if (s_know[i].key == 0 &&
+                InterlockedCompareExchange((volatile LONG *)&s_know[i].in_call, 2, 0) == 0) {
+                s_know[i].key = (uintptr_t)&t_know_key;
+                s_know[i].in_call = 0;
+                t_know = &s_know[i];
+                break;
+            }
+        }
+    }
+    return t_know;
+}
+void xbox_thread_state_print(uintptr_t key, const char *who)
+{
+    int i;
+    for (i = 0; i < 64; i++) {
+        if (s_know[i].key == key) {
+            KThreadNow *k = &s_know[i];
+            fprintf(stderr, "  %s: %s kernel ordinal %u from guest 0x%08X (esp 0x%08X), %.1f s ago\n",
+                    who, k->in_call == 1 ? "inside" : "last left", k->ordinal, k->ret, k->esp,
+                    (double)(GetTickCount64() - k->since) / 1000.0);
+            return;
+        }
+    }
+    fprintf(stderr, "  %s: has made no kernel call\n", who);
+}
+
+static void kernel_thunk_dispatch_body_inner(void);
 static void kernel_thunk_dispatch_body(void)
+{
+    KThreadNow *k = know_self();
+    if (k) {
+        k->ordinal = g_kernel_dispatch_slot >= 0 && g_kernel_dispatch_slot < XBOX_KERNEL_THUNK_TABLE_SIZE
+                   ? g_slot_ordinals[g_kernel_dispatch_slot] : 0;
+        k->esp = g_esp;
+        k->ret = g_esp ? BRIDGE_MEM32(g_esp) : 0;
+        k->since = GetTickCount64();
+        k->in_call = 1;
+    }
+    kernel_thunk_dispatch_body_inner();
+    if (k) {
+        k->since = GetTickCount64();
+        k->in_call = 0;
+    }
+}
+
+static void kernel_thunk_dispatch_body_inner(void)
 {
     int slot = g_kernel_dispatch_slot;
     bridge_func_t bridge;

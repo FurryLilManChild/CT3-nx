@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 2: freezes after character select (looping audio)
+
+- Mark: both tries froze right after character select, before NOW LOADING; the second with the "broken record"
+  audio. (Switch test 1's first try did this too, with the old blocking lock wait, so it is not new.)
+- Both logs: from about 40 s the CRI stats read "passes 0 ... now count 1 holder caller 000B9482": the CRI sound
+  lock is held and never released, so the server passes stop (the looping audio), and "[CRI] pass: waiting over
+  2 s for the sound lock". The idle thread (priority +2, which runs while the lock is held) then takes the CPU
+  (38% of the main thread's lock waits, one thread at 86%), 26 then 11 fps. 0x000B9482 is only the lock
+  callback wrapper (0x000B9470 calls [0x002E0750]), so the holder is unknown. No guest-lock wait over 2 s was
+  reported, so the holder is not stuck in RtlEnterCriticalSection.
+- Diagnostic: the CRI lock override saves the holder's thread and guest stack when the count goes 0 to 1; a pass
+  waiting 2 s prints them and what the holder is doing in the kernel right now (kernel_bridge.c keeps, per
+  thread, the current or last kernel ordinal, its guest return address and since when).
+
 ## 2026-11-06: Switch test 1: menus at full speed, NOW LOADING stalls
 
 - Mark: menus and character select at full speed (58 to 60 fps at 1224 MHz). Loading into a shift stuck twice on

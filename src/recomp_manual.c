@@ -141,6 +141,23 @@ static uintptr_t s_cri_lock_owner;         /* thread that took the count from 0 
 static uint32_t  s_cri_lock_caller;        /* its return address */
 static uint64_t  s_cri_lock_since;
 static int       s_cri_active;             /* threads inside a pass */
+static uintptr_t s_cri_lock_key;           /* xbox_thread_key() of the holder */
+static uint32_t  s_cri_lock_stack[48];     /* its guest stack when it took the lock */
+extern uintptr_t xbox_thread_key(void);
+extern void xbox_thread_state_print(uintptr_t key, const char *who);
+
+static void cri_holder_report(void)
+{
+    int k, n = 0;
+    xbox_thread_state_print(s_cri_lock_key, "[CRI]   the holder");
+    xbox_thread_state_print(xbox_thread_key(), "[CRI]   this waiter");
+    fprintf(stderr, "  [CRI]   the holder's guest stack when it took the lock (code addresses):");
+    for (k = 0; k < 48 && n < 16; k++) {
+        uint32_t v = s_cri_lock_stack[k];
+        if (v >= 0x00011000u && v < 0x00123440u) { fprintf(stderr, " %08X", v); n++; }
+    }
+    fprintf(stderr, "\n");
+}
 
 /* The guest's KeTickCount (kernel data + 0x20), which xbox_memory_layout.c's
  * tick thread writes every millisecond. (Not xbox_KeTickCount: that host
@@ -199,9 +216,16 @@ void sub_000B32F0(void)                 /* lock */
         s_cri_st.lock_wait_ms += cri_now_ms() - t0;
     }
     if (MEM32(0x002E00BCu) == 0) {
+        int k;
         s_cri_lock_owner = me;
         s_cri_lock_caller = caller;
         s_cri_lock_since = cri_now_ms();
+        s_cri_lock_key = xbox_thread_key();
+        /* The guest stack as it is now: the return addresses in it say which
+         * code path took the lock (caller is only the callback wrapper at
+         * 0x000B9470). Printed if a pass waits on this hold for 2 s. */
+        for (k = 0; k < 48; k++)
+            s_cri_lock_stack[k] = MEM32(esp + 4u * (uint32_t)k);
     }
     sub_000B32F0_gen();
 }
@@ -231,8 +255,10 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
                 /* Faithful (no server runs while the lock is held), so no
                  * give-up, but a long wait is logged with the holder. */
                 if (!noted && cri_now_ms() > t0 + 2000) {
-                    fprintf(stderr, "[CRI] pass: waiting over 2 s for the sound lock (count %u, taken from %08X)\n",
-                            MEM32(0x002E00BCu), s_cri_lock_caller);
+                    fprintf(stderr, "[CRI] pass: waiting over 2 s for the sound lock (count %u, taken from %08X, %llu ms ago)\n",
+                            MEM32(0x002E00BCu), s_cri_lock_caller,
+                            (unsigned long long)(cri_now_ms() - s_cri_lock_since));
+                    cri_holder_report();
                     noted = 1;
                 }
                 recomp_spin_yield();
