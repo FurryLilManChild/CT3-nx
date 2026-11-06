@@ -371,6 +371,8 @@ NTSTATUS __stdcall xbox_NtDuplicateObject(
 typedef struct {
     volatile LONG tid;
     volatile LONG busy;          /* kernel depth + raised IRQL */
+    volatile LONG coop;          /* CT3-nx: suspend count set by another thread */
+    HANDLE volatile coop_ev;     /* set by NtResumeThread */
 } KThreadSlot;
 static KThreadSlot g_kbusy[KBUSY_SLOTS];
 static XBOX_THREAD_LOCAL KThreadSlot *t_kslot;
@@ -402,6 +404,33 @@ void xbox_kernel_busy(int delta)
         t_kslot->busy += delta;
 }
 
+/* CT3-nx: suspension of another guest thread is cooperative.
+ *
+ * The kernel call lets go of the guest lock, so the thread being suspended
+ * may be holding it (it took it while this one was in the kernel) or waiting
+ * for its ticket. Frozen by a real SuspendThread there, it never lets go, and
+ * the caller waits for the lock forever: Crazy Taxi 3's sound lock (CRI's,
+ * 0x000B32F0 and 0x000B3330) suspends and resumes its server thread around
+ * every locked section, and the PC boot test hung with the main thread in
+ * that call (watchdog, 2026-11-05). So the suspend count is kept here and
+ * the thread stops itself at xbox_thread_suspend_point, which the guest lock
+ * calls just before taking the lock back after a kernel call, a poll-loop
+ * yield or a preemption: a point where it holds neither the lock nor a
+ * ticket, and is not in the kernel. As on the Xbox, where suspension is an
+ * APC, the call returns before the thread has stopped; a thread that is
+ * running stops at its next such point. A thread suspending itself, or one
+ * that has never called the kernel (no slot: created suspended), takes the
+ * old path. */
+void xbox_thread_suspend_point(void)
+{
+    KThreadSlot *k = t_kslot;
+
+    if (!k || k->coop <= 0)
+        return;
+    while (k->coop > 0)
+        WaitForSingleObject(k->coop_ev, 5);
+}
+
 NTSTATUS __stdcall xbox_NtSuspendThread(
     HANDLE ThreadHandle,
     PULONG PreviousSuspendCount)
@@ -409,6 +438,24 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
     DWORD prev, tid = GetThreadId(ThreadHandle);
     KThreadSlot *k = tid != GetCurrentThreadId() ? kbusy_slot(tid, 0) : NULL;
     ULONGLONG give_up = GetTickCount64() + 100;
+
+    if (k) {
+        if (!k->coop_ev) {
+            HANDLE ev = CreateEventA(NULL, FALSE, FALSE, NULL);
+            if (InterlockedCompareExchangePointer((PVOID volatile *)&k->coop_ev, ev, NULL) != NULL)
+                CloseHandle(ev);
+        }
+        prev = (DWORD)(InterlockedIncrement(&k->coop) - 1);
+        {
+            static unsigned shown;
+            if (shown++ < 3)
+                fprintf(stderr, "  [KERNEL] NtSuspendThread: tid %lu suspends tid %lu (cooperative)\n",
+                        GetCurrentThreadId(), tid);
+        }
+        if (PreviousSuspendCount)
+            *PreviousSuspendCount = (ULONG)prev;
+        return STATUS_SUCCESS;
+    }
 
 #ifndef _WIN32
     /* CT3-nx: a thread suspending itself blocks until it is resumed, as on
@@ -471,6 +518,18 @@ NTSTATUS __stdcall xbox_NtResumeThread(
     PULONG PreviousSuspendCount)
 {
     DWORD prev;
+    DWORD tid = GetThreadId(ThreadHandle);
+    KThreadSlot *k = tid != GetCurrentThreadId() ? kbusy_slot(tid, 0) : NULL;
+
+    /* CT3-nx: the cooperative suspensions first (see xbox_thread_suspend_point). */
+    if (k && k->coop > 0) {
+        prev = (DWORD)InterlockedDecrement(&k->coop) + 1;
+        if (k->coop_ev)
+            SetEvent(k->coop_ev);
+        if (PreviousSuspendCount)
+            *PreviousSuspendCount = (ULONG)prev;
+        return STATUS_SUCCESS;
+    }
 
     /* Mirror of NtSuspendThread: (DWORD)-1 is failure, not a count. */
     prev = ResumeThread(ThreadHandle);

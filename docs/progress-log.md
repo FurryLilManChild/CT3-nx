@@ -1,5 +1,22 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 2 (watchdog), a suspend deadlock
+
+- Boot test with RECOMP_WATCHDOG_SECS=40: no failed indirect calls and no stubs any more; still no window.
+- Watchdog stack: the main thread inside NtSuspendThread (0x000DE12F), called from 0x000B333E in 0x000B3330, the
+  unlock half of a lock pair (0x000B32F0 resumes the thread whose handle is at 0x0034ED60 and raises the caller's
+  priority; 0x000B3330 suspends it and restores the priority), reached through the callback pointer at 0x002E0758
+  (0x000B9490). The call chain continues 0x000BF6C8, 0x000BF310, 0x0003B653, 0x0005E75D. By the pattern, CRI's
+  sound-server lock.
+- Cause, in the runtime: a kernel call lets go of the guest lock, so the thread being suspended could take it (or
+  queue a ticket for it) while the caller was in NtSuspendThread; the Windows path then froze it with a real
+  SuspendThread while it held the lock, and the caller waited for the lock forever. sheroes-nx never met it: its CRI
+  thread only suspends itself.
+- Fix (kernel_thread.c, kernel_bridge.c): another thread's suspension is a count; the suspended thread stops itself
+  in xbox_gil_resume, just before it takes the guest lock back, where it holds neither the lock nor a ticket (not
+  while it holds the dispatch lock). NtResumeThread undoes those counts first. Self-suspension and threads with no
+  kernel slot keep the old path. Linux syntax check and tools/linux/wincheck.sh nongen: clean.
+
 ## 2026-11-05: PC boot test 1
 
 - Built and ran on Mark's PC (60 s boot test). No window: the GPU got no commands (DMA_PUT stayed at 0x00363000,

@@ -788,9 +788,16 @@ int xbox_gil_suspend(void)
     return d;
 }
 
+void xbox_thread_suspend_point(void);   /* kernel_thread.c */
+
 void xbox_gil_resume(int depth)
 {
     if (depth > 0 && gil_enabled()) {
+        /* CT3-nx: a thread another one suspended stops here, holding no lock
+         * and no ticket (unless it holds the dispatch lock: an ISR or DPC
+         * runs to completion). */
+        if (!xbox_thread_holds_dispatch())
+            xbox_thread_suspend_point();
         gil_lock();
         t_gil_depth = depth;
     }
