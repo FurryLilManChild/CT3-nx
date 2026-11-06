@@ -113,22 +113,34 @@ void sub_000B33D0(void)
  * +1 server's stack; the game then called a wild pointer and crashed during
  * NOW LOADING.
  *
- * So the exclusion is made explicit: a pass does not start while another
- * thread holds the lock, and taking the lock waits for another thread's pass
- * to end. Both wait with the guest lock released. The lock's wait gives up
- * after 100 ms (logged): on the Xbox a server that blocks mid-pass does let
- * the main thread in, and that must not become a deadlock here. A thread may
- * take the lock inside its own pass, and run a pass inside its own lock. */
+ * The lock itself (disassembled): on 0 -> 1 it saves the caller's priority,
+ * raises it to [0x002E00A8] and resumes the idle thread [0x0034ED60]; the
+ * unlock on 1 -> 0 suspends the idle thread and restores the priority. So
+ * while any thread holds it no server can run, and a thread that is not a
+ * server only gets in during a pass when the server blocks. The two servers'
+ * passes can overlap (the +1 pre-empts the -2 mid-pass).
+ *
+ * So: taking the lock fresh (count 0) outside a pass waits for every running
+ * pass to end (giving up after 100 ms, logged; a server blocked mid-pass lets
+ * the main thread in on the Xbox too). A pass started outside a pass waits
+ * while a thread other than this one holds the lock. Nested calls never
+ * wait. PC play test 13: the first version waited on the most recent pass of
+ * either server, even from inside the other server's own pass, so the servers
+ * waited on each other 100 ms at a time and the logos crawled. Every 5 s a
+ * [CRI] stats line gives the counts and the waits (RECOMP_CRI_EXCL=0 turns
+ * the waits off; the stats stay). */
 extern void sub_000B32F0_gen(void);
 extern void sub_000B3330_gen(void);
 extern void sub_000B97E0_gen(void);
 /* Thread identity without host headers (this file builds for every host):
  * the address of a thread-local variable is unique per thread. */
 static RECOMP_TLS char t_cri_me;
+static RECOMP_TLS int  t_cri_pass_depth;   /* this thread's nesting in 0x000B97E0 */
 #define CRI_ME ((uintptr_t)&t_cri_me)
-static uintptr_t s_cri_lock_owner;      /* thread that took the count from 0 */
-static uintptr_t s_cri_pass_owner;      /* thread inside 0x000B97E0 */
-static int       s_cri_pass_depth;
+static uintptr_t s_cri_lock_owner;         /* thread that took the count from 0 */
+static uint32_t  s_cri_lock_caller;        /* its return address */
+static uint64_t  s_cri_lock_since;
+static int       s_cri_active;             /* threads inside a pass */
 
 /* The guest's KeTickCount (kernel data + 0x20), which xbox_memory_layout.c's
  * tick thread writes every millisecond. (Not xbox_KeTickCount: that host
@@ -136,53 +148,103 @@ static int       s_cri_pass_depth;
 extern uint32_t g_xbox_kernel_data_base;
 static uint64_t cri_now_ms(void) { return MEM32(g_xbox_kernel_data_base + 0x20u); }
 
+static int cri_excl(void)
+{
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("RECOMP_CRI_EXCL"); on = !(e && *e == '0'); }
+    return on;
+}
+
+static struct {
+    uint64_t next;
+    unsigned passes, locks, lock_waits, lock_giveups, pass_waits;
+    uint64_t lock_wait_ms, pass_wait_ms, max_hold_ms;
+} s_cri_st;
+
+static void cri_stats(uint64_t now)
+{
+    if (!s_cri_st.next) { s_cri_st.next = now + 5000; return; }
+    if (now < s_cri_st.next) return;
+    fprintf(stderr, "[CRI] stats 5 s: passes %u, locks %u, lock waits %u (%llu ms, %u gave up), "
+            "pass waits %u (%llu ms), longest hold %llu ms, now count %u holder caller %08X\n",
+            s_cri_st.passes, s_cri_st.locks, s_cri_st.lock_waits, (unsigned long long)s_cri_st.lock_wait_ms,
+            s_cri_st.lock_giveups, s_cri_st.pass_waits, (unsigned long long)s_cri_st.pass_wait_ms,
+            (unsigned long long)s_cri_st.max_hold_ms, MEM32(0x002E00BCu),
+            MEM32(0x002E00BCu) ? s_cri_lock_caller : 0u);
+    memset(&s_cri_st, 0, sizeof s_cri_st);
+    s_cri_st.next = now + 5000;
+}
+
 void sub_000B32F0(void)                 /* lock */
 {
     uintptr_t me = CRI_ME;
-    uint64_t give_up = cri_now_ms() + 100;
+    uint32_t caller = MEM32(esp);
+    uint64_t t0 = cri_now_ms();
 
-    while (s_cri_pass_depth > 0 && s_cri_pass_owner != me) {
-        if (cri_now_ms() > give_up) {
-            static unsigned shown;
-            if (shown++ < 5)
-                fprintf(stderr, "[CRI] lock: a server pass still running after 100 ms; taking the lock anyway\n");
-            break;
+    cri_stats(t0);
+    s_cri_st.locks++;
+    if (cri_excl() && MEM32(0x002E00BCu) == 0 && t_cri_pass_depth == 0 && s_cri_active > 0) {
+        s_cri_st.lock_waits++;
+        while (s_cri_active > 0) {
+            if (cri_now_ms() > t0 + 100) {
+                static unsigned shown;
+                s_cri_st.lock_giveups++;
+                if (shown++ < 5)
+                    fprintf(stderr, "[CRI] lock from %08X: a server pass still running after 100 ms; "
+                            "taking the lock anyway\n", caller);
+                break;
+            }
+            recomp_spin_yield();
         }
-        recomp_spin_yield();
+        s_cri_st.lock_wait_ms += cri_now_ms() - t0;
     }
-    if (MEM32(0x002E00BCu) == 0)
+    if (MEM32(0x002E00BCu) == 0) {
         s_cri_lock_owner = me;
+        s_cri_lock_caller = caller;
+        s_cri_lock_since = cri_now_ms();
+    }
     sub_000B32F0_gen();
 }
 
 void sub_000B3330(void)                 /* unlock */
 {
     sub_000B3330_gen();
-    if (MEM32(0x002E00BCu) == 0)
+    if (MEM32(0x002E00BCu) == 0 && s_cri_lock_owner) {
+        uint64_t held = cri_now_ms() - s_cri_lock_since;
+        if (held > s_cri_st.max_hold_ms) s_cri_st.max_hold_ms = held;
         s_cri_lock_owner = 0;
+    }
 }
 
 void sub_000B97E0(void)                 /* one server pass over a job group */
 {
     uintptr_t me = CRI_ME;
+    uint64_t t0 = cri_now_ms();
 
-    uint64_t note_at = cri_now_ms() + 2000;
-    int noted = 0;
-    while (MEM32(0x002E00BCu) > 0 && s_cri_lock_owner && s_cri_lock_owner != me) {
-        /* Faithful (on the Xbox no server runs while the lock is held), so no
-         * give-up here, but a long wait is logged so a hang shows its cause. */
-        if (!noted && cri_now_ms() > note_at) {
-            fprintf(stderr, "[CRI] pass: waiting over 2 s for the sound lock (count %u)\n",
-                    MEM32(0x002E00BCu));
-            noted = 1;
+    cri_stats(t0);
+    if (t_cri_pass_depth == 0) {
+        s_cri_st.passes++;
+        if (cri_excl() && MEM32(0x002E00BCu) > 0 && s_cri_lock_owner && s_cri_lock_owner != me) {
+            int noted = 0;
+            s_cri_st.pass_waits++;
+            while (MEM32(0x002E00BCu) > 0 && s_cri_lock_owner && s_cri_lock_owner != me) {
+                /* Faithful (no server runs while the lock is held), so no
+                 * give-up, but a long wait is logged with the holder. */
+                if (!noted && cri_now_ms() > t0 + 2000) {
+                    fprintf(stderr, "[CRI] pass: waiting over 2 s for the sound lock (count %u, taken from %08X)\n",
+                            MEM32(0x002E00BCu), s_cri_lock_caller);
+                    noted = 1;
+                }
+                recomp_spin_yield();
+            }
+            s_cri_st.pass_wait_ms += cri_now_ms() - t0;
         }
-        recomp_spin_yield();
+        s_cri_active++;
     }
-    s_cri_pass_depth++;
-    s_cri_pass_owner = me;
+    t_cri_pass_depth++;
     sub_000B97E0_gen();
-    if (--s_cri_pass_depth == 0)
-        s_cri_pass_owner = 0;
+    if (--t_cri_pass_depth == 0)
+        s_cri_active--;
 }
 
 /* ── D3D fence wait, BlockOnTime (0x000F86C0) ─────────────────

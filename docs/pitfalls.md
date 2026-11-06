@@ -46,6 +46,12 @@ the rule.
     drawn from the font, and the font holds no button pictures. Rule: a "missing" element needs a trace showing a
     draw that failed or was skipped; otherwise ask how the original looks.
 
+17. **Model every thread a lock involves before writing an exclusion.** Test 13: I wrote the CRI exclusion with
+    one shared "current pass" and owner, thinking of "the server" as one thread. There are two, and their passes
+    overlap on the Xbox, so the servers waited on each other 100 ms at a time and the logos crawled. Rule: list
+    the threads on each side (here, both servers and the main thread), what the original lets overlap, keep
+    nesting per thread, and give any new wait a counter so its cost shows in the log.
+
 ## Code generation and seeds
 
 6. **A sweep category that finds nothing is a red flag.** Kickoff: seed_sweep's immediate-reference sweep found 0,

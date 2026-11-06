@@ -1,5 +1,22 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 13: logos crawl, stuck at the Hitmaker logo
+
+- Mark: slow through the SEGA and other logos, then the Hitmaker logo stayed (frozen, or too slow to tell).
+  The renderer kept going (about 56 fps after the first seconds).
+- The log: five "[CRI] lock: a server pass still running after 100 ms" lines (the cap) in the first seconds, and
+  one "[CRI] pass: waiting over 2 s for the sound lock (count 1)".
+- Cause of the crawl: test 12's exclusion tracked one "current pass" for both sound servers. Their passes overlap
+  on the Xbox (the +1 server pre-empts the -2 one mid-pass), so a server taking the lock inside its own pass
+  waited on the other server's pass, 100 ms at a time.
+- The lock, read in full this time: on 0 to 1 it raises the caller to priority 15 ([0x002E00A8], set at
+  0x000B3591) and resumes the idle thread; the unlock undoes both. Rework: only a fresh lock taken outside a pass
+  waits for running passes (100 ms give-up); a pass started outside a pass waits while another thread holds the
+  lock; nested calls never wait. The pass nesting is per thread.
+- Not explained yet: the 2 s pass wait (someone held the lock that long). The new [CRI] stats line every 5 s
+  (passes, locks, waits and their time, give-ups, the longest hold, the current holder's caller) answers it next
+  run. RECOMP_CRI_EXCL=0 turns the waits off.
+
 ## 2026-11-05: PC play test 12: crash moved into NOW LOADING; the character-select bodies
 
 - Mark: same run (West Coast, Arcade, a character); the character select still had Axel's torso and legs missing,
