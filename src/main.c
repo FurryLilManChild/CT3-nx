@@ -408,6 +408,17 @@ static int game_main(void)
      * off until it is checked on this game. */
     setenv("RECOMP_CULL", "0", 0);
 #endif
+    /* CT3-nx, PC play test 16 (frame trace): the circles round hailing
+     * customers are inline line strips with world positions in fixed-function
+     * mode (13 vertices, colour CFBF0000 / CF68B808). The executor took inline
+     * vertices as already on screen, so they landed thousands of pixels off.
+     * This title's other inline draws use vertex programs, so transforming
+     * fixed-mode inline vertices (as the hardware does) touches only these. */
+#ifdef _WIN32
+    if (!getenv("RECOMP_INLINE_FFP")) _putenv("RECOMP_INLINE_FFP=1");
+#else
+    setenv("RECOMP_INLINE_FFP", "1", 0);
+#endif
 #if defined(__SWITCH__)
     /* Every periodic log line flushes to the SD card; keep the log to what
      * matters on a console. RECOMP_QUIET=0 in ct3_env.txt brings it back. */

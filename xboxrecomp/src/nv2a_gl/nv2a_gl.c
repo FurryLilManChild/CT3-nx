@@ -1322,9 +1322,8 @@ static void apply_state(const uint32_t *r, int has_depth, const GlSurf *s)
         glStencilMask(r[0x360 / 4] & 0xFF);
         glStencilFunc(r[0x364 / 4] ? r[0x364 / 4] : GL_ALWAYS, (GLint)(r[0x368 / 4] & 0xFF),
                       r[0x36C / 4] & 0xFF);
-        glStencilOp(r[0x370 / 4] ? r[0x370 / 4] : GL_KEEP,
-                    r[0x374 / 4] ? r[0x374 / 4] : GL_KEEP,
-                    r[0x378 / 4] ? r[0x378 / 4] : GL_KEEP);
+        /* 0 is GL_ZERO, not "unset" (Crazy Taxi 3's shadow pass; nv2a_vk.c). */
+        glStencilOp(r[0x370 / 4], r[0x374 / 4], r[0x378 / 4]);
     } else {
         glDisable(GL_STENCIL_TEST);
     }

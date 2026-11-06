@@ -2713,7 +2713,13 @@ static VkStencilOp stencil_op(uint32_t v)
     case 0x150A: return VK_STENCIL_OP_INVERT;
     case 0x8507: return VK_STENCIL_OP_INCREMENT_AND_WRAP;
     case 0x8508: return VK_STENCIL_OP_DECREMENT_AND_WRAP;
-    default: return VK_STENCIL_OP_KEEP;         /* KEEP, and 0 (never set) */
+    /* 0 is GL_ZERO. CT3-nx, PC play test 16: the car's shadow volume ends
+     * with a full-screen pass (colour writes off, stencil EQUAL 0x80, z-pass
+     * op 0) that clears the untouched receivers before the dark quad draws
+     * wherever the stencil is not 0. Taken as KEEP, every receiver under the
+     * car stayed 0x80 and the whole patch went dark (the big trapezoid). */
+    case 0x0000: return VK_STENCIL_OP_ZERO;
+    default: return VK_STENCIL_OP_KEEP;         /* KEEP (0x1E00) */
     }
 }
 

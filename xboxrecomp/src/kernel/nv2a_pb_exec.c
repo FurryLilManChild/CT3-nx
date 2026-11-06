@@ -1350,6 +1350,8 @@ static uint32_t linear_twin(uint32_t fmt)
     case 0x06: return 0x12;                /* A8R8G8B8  -> LIN_A8R8G8B8  */
     case 0x07: return 0x1E;                /* X8R8G8B8  -> LIN_X8R8G8B8  */
     case 0x19: return 0x1F;                /* A8        -> LIN_A8        */
+    case 0x1A: return 0x20;                /* A8L8      -> LIN_A8L8      */
+    case 0x01: return 0x1B;                /* AL8       -> LIN_AL8       */
     default:   return fmt;                 /* already linear, or unhandled */
     }
 }
@@ -1457,6 +1459,20 @@ static int sample_texture(const Texture *t, uint32_t u, uint32_t v, uint32_t *ar
     case 0x1F:                                      /* LIN_A8 */
         *argb = ((uint32_t)p[u] << 24) | 0x00FFFFFFu;
         return 1;
+    case 0x1B: {                                    /* LIN_AL8: one byte, both */
+        uint32_t t = p[u];
+        *argb = (t << 24) | (t << 16) | (t << 8) | t;
+        return 1;
+    }
+
+    /* CT3-nx: A8L8 (0x1A) and LIN_A8L8, alpha in the high byte: Crazy Taxi
+     * 3's fare counter digits (32x32, PC play test 16) drew magenta. */
+    case 0x20: {                                    /* LIN_A8L8 */
+        uint32_t t = ((const uint16_t *)p)[u];
+        uint32_t l = t & 0xFFu;
+        *argb = ((t >> 8) << 24) | (l << 16) | (l << 8) | l;
+        return 1;
+    }
 
     /* 4:2:2 packed YUV, two texels per four bytes.
      *

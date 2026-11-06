@@ -1,5 +1,26 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 16: four frame traces in a shift
+
+- First run stuck on NOW LOADING; the second was fine. The stuck run opened Partition5\tmp (the bank10.mdl cache
+  copy, which every run makes) and never renamed it; the loader worker (0x000DE29D, ctx 0x000A05E0) made no kernel
+  call after that while the main thread kept drawing at 59 fps. No thread dump, so the cause is open; next time
+  it sticks, a dump.
+- Pink in the counters: the only undecodable format logged was 0x1A (A8L8, swizzled), texture 81BDB000 32x32.
+  The executor's decoder had no A8L8: added A8L8 (0x1A, via LIN_A8L8 0x20) and AL8 (0x01, via LIN_AL8 0x1B).
+- Black squares under the characters: the same 81BDB000 texture, drawn as blended ground quads with a near-black
+  vertex colour (FF000019, constant alpha 0x33): magenta times black is a black square. The A8L8 decoder fixes it.
+- The car's big dark trapezoid: a stencil shadow volume (1920 indices, INCR_WRAP front / DECR_WRAP back), then a
+  full-screen pass with colour writes off, stencil EQUAL 0x80 and z-pass op 0, then a dark quad (A0000000) where
+  the stencil is not 0. Op 0 is GL_ZERO; nv2a_vk took it as KEEP (nv2a_gl likewise), so every receiver under the
+  car stayed 0x80 and went dark. Both now map 0 to ZERO.
+- Hailing circles: two inline line strips of 13 vertices (colours CFBF0000 and CF68B808, ONE / INV_SRC_ALPHA)
+  with world positions in fixed-function mode. The executor treats inline vertices as already on screen unless
+  RECOMP_INLINE_FFP=1, so they landed at x 1162, y 1510. This title's other inline draws use vertex programs, so
+  main.c now sets RECOMP_INLINE_FFP=1 by default. No destination-marker draw of that kind in the frame after the
+  pickup; to check once the circles show.
+- Pause: Mark sees the picture jitter. No trace yet.
+
 ## 2026-11-06: PC play test 15: in game
 
 - Mark played: past NOW LOADING into a shift, driving, about 57 fps. The disasm fix held (no stub besides the lone
