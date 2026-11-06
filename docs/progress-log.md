@@ -1,5 +1,15 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 17: the visual fixes hold; the pause screen
+
+- Mark: the counters, the character and car shadows and the hailing circles are right now.
+- Pause (three traces): each paused frame clears only depth and stencil (clear 0x03, no colour) and draws only
+  the 48 quads of the pause menu, alternating between the two buffers 80564000 and 80690000. So the picture
+  behind the menu is whatever each buffer last held: if those are two different frames, the screen alternates
+  between them (the jitter). Whether the game draws the scene into both buffers on the way into the pause (so
+  they match on the Xbox) is not in these traces. Added [FSUM] lines: when a frame's draw count falls under a
+  quarter of the last one, the six frames before and the ten after are printed (draws, colour clears, surface).
+
 ## 2026-11-06: PC play test 16: four frame traces in a shift
 
 - First run stuck on NOW LOADING; the second was fine. The stuck run opened Partition5\tmp (the bank10.mdl cache

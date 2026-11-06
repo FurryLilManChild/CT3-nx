@@ -1135,6 +1135,15 @@ int nv2a_backend_decode_texture(const Nv2aTexture *tex, uint32_t *argb_out)
 }
 
 static int s_ftrace_on;                /* RECOMP_FRAME_TRACE armed for this frame */
+
+/* CT3-nx: a summary of each frame (draws, colour clears, the surface last
+ * drawn to) kept for the last 6 frames. When the draw count falls to under a
+ * quarter of the frame before (a pause screen, a loading screen), the six
+ * and the next ten are printed as [FSUM] lines: Crazy Taxi 3's pause shows a
+ * jittering picture, and this shows what the game drew going into it without
+ * needing a trace timed to the button press. Three events per run. */
+static struct { uint32_t flip, draws, cclears, surf; } s_fsum_ring[6], s_fsum_cur;
+static unsigned s_fsum_n, s_fsum_post, s_fsum_events;
 static int ftrace_cmpf(const void *a, const void *b)
 {
     float x = *(const float *)a, y = *(const float *)b;
@@ -1156,6 +1165,7 @@ static void clear_surface(uint32_t param)
         if (!s_gpu.color_offset || !s_gpu.pitch || !s_gpu.clip_h || bpp == 0)
             return;
         current_surface(&surf);
+        if (param & 0xF0) s_fsum_cur.cclears++;
         if (s_ftrace_on)
             fprintf(stderr, "[FTRACE] clear %08X surf %08X clip %u,%u %ux%u colour %08X z %08X\n",
                     param, surf.color_va, s_gpu.clip_x, s_gpu.clip_y, s_gpu.clip_w, s_gpu.clip_h,
@@ -3392,6 +3402,8 @@ static void raw_batch(void)
     rb.color_va = rb.surface.color_va;
     rb.zeta_va = s_gpu.rs.zeta_va;
     rb.xform = batch_is_vp() ? 2 : batch_is_ffp() ? 1 : 0;
+    s_fsum_cur.draws++;
+    s_fsum_cur.surf = rb.color_va;
     memcpy(rb.composite, s_gpu.composite, sizeof rb.composite);
     memcpy(rb.vp_offset, s_gpu.vp_offset, sizeof rb.vp_offset);
     rb.aa_sx = s_gpu.aa_sx;
@@ -4971,6 +4983,28 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
             if (s_ftrace_on) {
                 s_ftrace_on = 0;
                 fprintf(stderr, "[FTRACE] end of frame\n");
+            }
+            {   /* the frame summary (s_fsum_ring above) */
+                unsigned k, prev = s_fsum_n ? s_fsum_ring[(s_fsum_n - 1) % 6].draws : 0;
+                s_fsum_cur.flip = s_gpu.flips;
+                if (s_fsum_post) {
+                    s_fsum_post--;
+                    fprintf(stderr, "[FSUM] flip %u: %u draws, %u colour clears, surface %08X\n",
+                            s_fsum_cur.flip, s_fsum_cur.draws, s_fsum_cur.cclears, s_fsum_cur.surf);
+                } else if (s_fsum_events < 3 && prev > 100 && s_fsum_cur.draws * 4 < prev) {
+                    s_fsum_events++;
+                    s_fsum_post = 10;
+                    fprintf(stderr, "[FSUM] draws fell from %u to %u; the frames around it:\n",
+                            prev, s_fsum_cur.draws);
+                    for (k = s_fsum_n > 6 ? s_fsum_n - 6 : 0; k < s_fsum_n; k++)
+                        fprintf(stderr, "[FSUM] flip %u: %u draws, %u colour clears, surface %08X\n",
+                                s_fsum_ring[k % 6].flip, s_fsum_ring[k % 6].draws,
+                                s_fsum_ring[k % 6].cclears, s_fsum_ring[k % 6].surf);
+                    fprintf(stderr, "[FSUM] flip %u: %u draws, %u colour clears, surface %08X  <- this one\n",
+                            s_fsum_cur.flip, s_fsum_cur.draws, s_fsum_cur.cclears, s_fsum_cur.surf);
+                }
+                s_fsum_ring[s_fsum_n++ % 6] = s_fsum_cur;
+                memset(&s_fsum_cur, 0, sizeof s_fsum_cur);
             }
             if (flag && remove(flag) == 0) {
                 s_ftrace_on = 1;
