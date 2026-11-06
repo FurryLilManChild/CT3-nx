@@ -1,5 +1,23 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 1
+
+- Built and ran on Mark's PC (60 s boot test). No window: the GPU got no commands (DMA_PUT stayed at 0x00363000,
+  0 draws), so nothing was ever presented.
+- The game got well into boot: TDATA/UDATA save folders, SaveMeta.xbx and saveimage.xbx read, Media/SE/taxi1.bin
+  copied to the cache partition (Partition5), DirectSound up (interrupts on vectors 5 and 6, APU started by the
+  title, the DSP command word acknowledged at once by the 0x00109068 hook), taxidsp.bin loaded, four worker threads
+  started. After that the main thread made no more kernel calls for the rest of the minute (only the timer
+  thread's KeInsertQueueDpc and KeSetEvent): a loop in game code, location unknown from this log.
+- Five failed indirect calls from 0x000F3916: D3D SetRenderState (sub_000F38C0) dispatches states 0x76 and up
+  through a 29-entry table at 0x00100E30, and 15 of its handlers were unknown. All 15 seeded. A scan of .rdata,
+  .data and the library sections for pointer runs into library code found no other real table.
+- One stub ran: 0x00036180, from 0x000E49AC (a tail jump target after padding). Seeded.
+- `wbinvd` at 0x000FB7F2 reached (no-op, harmless). The kernel bridge read one entry past the thunk table
+  (0x0012A52C, "1 stub"); harmless so far.
+- Regen: 5,537 functions, 0 failed, 205 unresolved.
+- Next test: the same boot test with RECOMP_WATCHDOG_SECS=40, which dumps the main thread's guest call stack.
+
 ## 2026-11-05: first regen, the XDK 4531 hooks, seeds
 
 - Mark's OK (2026-11-05) to run xboxrecomp in the cloud.

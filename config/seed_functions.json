@@ -4,6 +4,10 @@
   "note": "seed_sweep.py [ret] 2026-11-05, reviewed by hand: .text: follows a ret with no padding, 16-byte aligned; not inside any known function; starts 'push ecx; push ebx'"
  },
  {
+  "start": "0x00036180",
+  "note": "PC boot test 2026-11-05: [STUB] unresolved 0x00036180 entered from 0x000E49AC. Follows NOP padding, 16-byte aligned, prologue sub esp,0xC; push esi; mov [esp+4],ecx (thiscall); reached by a tail jump from sub_000EEF40"
+ },
+ {
   "start": "0x00064500",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x00066416 (push 0x64500); not inside any known function; starts 'sub esp, 0x14; mov ecx, dword ptr [0x2bb5ec]'"
  },
@@ -150,6 +154,66 @@
  {
   "start": "0x000F3800",
   "note": "seed_sweep.py [gap] 2026-11-05, reviewed by hand: PSGSFD_P: right after the end of sub_000F33A0, no function starts there; not inside any known function; starts 'mov ecx, dword ptr [esp + 4]; mov eax, dword ptr [0x1051d0]'"
+ },
+ {
+  "start": "0x000F3830",
+  "note": "D3D render-state handler, entry for state 0x89 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3860",
+  "note": "D3D render-state handler, entry for state 0x76 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3CD0",
+  "note": "D3D render-state handler, entry for state 0x80 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3EA0",
+  "note": "D3D render-state handler, entry for state 0x83 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3F20",
+  "note": "D3D render-state handler, entry for state 0x84 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3F80",
+  "note": "D3D render-state handler, entry for state 0x79 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F3FD0",
+  "note": "D3D render-state handler, entry for state 0x7A of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4030",
+  "note": "D3D render-state handler, entry for state 0x7B of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F48F0",
+  "note": "D3D render-state handler, entry for state 0x8D of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4920",
+  "note": "D3D render-state handler, entry for state 0x8E of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4990",
+  "note": "D3D render-state handler, entry for state 0x8F of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4A00",
+  "note": "D3D render-state handler, entry for state 0x90 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4A20",
+  "note": "D3D render-state handler, entry for state 0x91 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4A40",
+  "note": "D3D render-state handler, entry for state 0x92 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
+ },
+ {
+  "start": "0x000F4AC0",
+  "note": "D3D render-state handler, entry for state 0x87 of the table at 0x00100E30 (indexed from state 0x76; read by `call [esi*4+0x100E30]` at 0x000F390F in SetRenderState sub_000F38C0). PC boot test 2026-11-05: [ICALL] failed for 0x000F3860, 0x000F3F80, 0x000F3FD0, 0x000F4030, 0x000F4AC0 from 0x000F3916; the other 10 found by reading the table"
  },
  {
   "start": "0x000FBDB0",
