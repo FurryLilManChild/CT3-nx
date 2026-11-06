@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 15: in game
+
+- Mark played: past NOW LOADING into a shift, driving, about 57 fps. The disasm fix held (no stub besides the lone
+  ret 0x000C0946, no crash).
+- His list: (1) pink blocks in the TOTAL EARNED counter, (2) the circles around hailing customers and the
+  destination markers missing, (3) black squares for the characters' shadows, (4) A/B and X/Y swapped.
+- (4): ct3_menu.c's default "Xbox positions" layout swaps A/B and X/Y, right for the Switch (which reports buttons
+  by label) and wrong on the PC, where XInput and SDL already report Xbox positions. The tables are now per
+  platform (the PC's "Xbox positions" is the identity).
+- (1): magenta is the Vulkan renderer's fill for a texture format it cannot decode; it now names each such
+  format once in the log, trace or not.
+- (2) and (3): no frame trace in this run; the next one, taken in a shift, covers them.
+
 ## 2026-11-06: PC play test 14: character select fixed, the old crash at the start of a shift
 
 - Mark: the character select draws Axel whole now (the skinning fix). The game then crashed exactly where test 10

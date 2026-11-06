@@ -1163,8 +1163,17 @@ static void tex_fill(VkTex *t, uint32_t va, uint32_t layer)
             uint32_t k;
             for (k = 0; k < w * h; k++)
                 px[k] = 0xFFFF00FFu;
-            if (s_trace)
-                LOGE("texture 0x%08X format 0x%02X not decodable\n", va, color);
+            {   /* CT3-nx: always name each format that fell to magenta,
+                 * once (the pink in Crazy Taxi 3's fare counter, PC play
+                 * test 15); the trace lists every texture. */
+                static uint32_t seen[8];
+                uint32_t bit = 1u << (color & 31);
+                if (s_trace || !(seen[(color >> 5) & 7] & bit)) {
+                    seen[(color >> 5) & 7] |= bit;
+                    fprintf(stderr, "[VK] texture 0x%08X format 0x%02X %ux%u pitch %u not decodable (drawn magenta)\n",
+                            va, color, w, h, pitch);
+                }
+            }
         }
     }
     tex_copy_from_ring(t, at, 0, layer, 0);

@@ -65,8 +65,19 @@ extern volatile int nv2a_vk_fxaa, nv2a_vk_aniso, nv2a_vk_scale_pct;
 /* Pad slots in the report, by the Switch button that fills them (xinput_nx.c
  * maps by label): A B X Y R L ZL ZR = Xbox A B X Y Black White LT RT. */
 static const char *const s_pad_name[8] = { "A", "B", "X", "Y", "R", "L", "ZL", "ZR" };
+/* Which pad button each Xbox button reads. The Switch reports its buttons by
+ * label (A on the right), so "Xbox positions" swaps A/B and X/Y there. A PC
+ * pad (XInput or SDL) already reports the Xbox positions (A at the bottom), so
+ * on the PC the same table is the identity and "Switch labels" is the swap:
+ * with the Switch tables, A/B and X/Y came out flipped on the Legion Go (PC
+ * play test 15). */
+#if defined(__SWITCH__)
 static const unsigned char s_map_xbox[8]  = { 1, 0, 3, 2, 4, 5, 6, 7 };  /* Xbox positions */
 static const unsigned char s_map_label[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };  /* Switch labels */
+#else
+static const unsigned char s_map_xbox[8]  = { 0, 1, 2, 3, 4, 5, 6, 7 };  /* Xbox positions */
+static const unsigned char s_map_label[8] = { 1, 0, 3, 2, 4, 5, 6, 7 };  /* Switch labels */
+#endif
 
 enum { LAYOUT_XBOX, LAYOUT_LABEL, LAYOUT_CUSTOM };
 
