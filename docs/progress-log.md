@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 4 (periodic watchdog)
+
+- All three test switches arrived. The main thread sat at esp 0x0097FE88 from 25 s to 55 s with the icall count
+  frozen at 35,652: the same NtSuspendThread hang as test 2 (chain 0x000B3343, 0x000B94A2, 0x000BF6C8,
+  0x000BF310, 0x0003B653, ...). Test 3's DCT snapshot was the same boot caught before the hang.
+- Why the fix did not apply: no "cooperative" line in tests 3 and 4. It only covered threads with a kernel slot,
+  and a slot was made at a thread's first kernel call; the sound server thread is suspended again before it ever
+  calls the kernel, so it took the old path (real SuspendThread) every time.
+- Fix: the suspender creates the target's slot; the target looks it up at the stop point if it has none yet
+  (guarded by a global count, so the check is one load when nothing is suspended). The old path now logs
+  "real suspension" so a miss shows in the log.
+
 ## 2026-11-05: PC boot test 3
 
 - The suspend fix holds: the main thread got past the sound lock (no hang in NtSuspendThread). It loaded

@@ -421,10 +421,19 @@ void xbox_kernel_busy(int delta)
  * running stops at its next such point. A thread suspending itself, or one
  * that has never called the kernel (no slot: created suspended), takes the
  * old path. */
+static volatile LONG g_coop_any;   /* cooperative suspensions outstanding, all threads */
+
 void xbox_thread_suspend_point(void)
 {
-    KThreadSlot *k = t_kslot;
+    KThreadSlot *k;
 
+    if (!g_coop_any)
+        return;
+    /* The suspender makes the slot, so a thread that has never been in the
+     * kernel (no t_kslot yet) still finds its count. */
+    if (!t_kslot)
+        t_kslot = kbusy_slot(GetCurrentThreadId(), 0);
+    k = t_kslot;
     if (!k || k->coop <= 0)
         return;
     while (k->coop > 0)
@@ -439,6 +448,12 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
     KThreadSlot *k = tid != GetCurrentThreadId() ? kbusy_slot(tid, 0) : NULL;
     ULONGLONG give_up = GetTickCount64() + 100;
 
+    /* CT3-nx: every other live thread, not only those that have been in the
+     * kernel: CT3's sound server is suspended again before its first kernel
+     * call, and the slot-less path below froze it holding the guest lock
+     * (PC boot test 4: the same hang). */
+    if (!k && tid && tid != GetCurrentThreadId())
+        k = kbusy_slot(tid, 1);
     if (k) {
         if (!k->coop_ev) {
             HANDLE ev = CreateEventA(NULL, FALSE, FALSE, NULL);
@@ -446,6 +461,7 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
                 CloseHandle(ev);
         }
         prev = (DWORD)(InterlockedIncrement(&k->coop) - 1);
+        InterlockedIncrement(&g_coop_any);
         {
             static unsigned shown;
             if (shown++ < 3)
@@ -475,6 +491,13 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
         return STATUS_SUCCESS;
     }
 #endif
+
+    {
+        static unsigned shown;
+        if (shown++ < 3)
+            fprintf(stderr, "  [KERNEL] NtSuspendThread: handle %p tid %lu, real suspension\n",
+                    ThreadHandle, tid);
+    }
 
     /*
      * SuspendThread returns the previous suspend count, or (DWORD)-1 on
@@ -524,6 +547,7 @@ NTSTATUS __stdcall xbox_NtResumeThread(
     /* CT3-nx: the cooperative suspensions first (see xbox_thread_suspend_point). */
     if (k && k->coop > 0) {
         prev = (DWORD)InterlockedDecrement(&k->coop) + 1;
+        InterlockedDecrement(&g_coop_any);
         if (k->coop_ev)
             SetEvent(k->coop_ev);
         if (PreviousSuspendCount)
