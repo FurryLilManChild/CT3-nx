@@ -1060,8 +1060,20 @@ NTSTATUS xbox_RenameOpenFile(HANDLE h, const char *xbox_target, BOOLEAN replace)
     if (!replace && access(dst, F_OK) == 0)
         return STATUS_OBJECT_NAME_COLLISION;
     if (rename(src, dst) != 0) {
-        XBOX_TRACE(XBOX_LOG_FILE, "rename %s -> %s errno=%d", src, dst, errno);
-        return STATUS_UNSUCCESSFUL;
+        /* Switch test 3: 0xC0000001 here left Crazy Taxi 3's city model
+         * cache (_bank10.mdl) as the previous run's file, and the city had
+         * no geometry. FAT does not rename over an existing file, nor (on
+         * the Switch) rename an open one: remove the old target, close the
+         * descriptor for now (reopened on next use), and try again. */
+        int e1 = errno;
+        if (replace)
+            unlink(dst);
+        w32_handle_park(h);
+        if (rename(src, dst) != 0) {
+            fprintf(stderr, "  [FILE] rename %s -> %s failed: errno %d, then %d\n", src, dst, e1, errno);
+            return STATUS_UNSUCCESSFUL;
+        }
+        fprintf(stderr, "  [FILE] rename %s -> %s done on the second try (first errno %d)\n", src, dst, e1);
     }
     w32_handle_set_path(h, dst);
     return STATUS_SUCCESS;

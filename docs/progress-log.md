@@ -1,5 +1,15 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 3: in game, but the city has no geometry
+
+- Mark: into a shift this time (no freeze, so the CRI holder report did not fire). The taxi, traffic and people
+  float in the sky: no city geometry.
+- Log: `[FILE] rename to Z:\_bank10.mdl (replace): 0xC0000001`. The POSIX rename failed (FAT does not rename over
+  an existing file, and the Switch will not rename an open one), so the game read the old _bank10.mdl the first
+  Switch run left on the SD card: the city model bank. In-game 24 to 29 fps at 1224 MHz (menus 58 to 60).
+- Fix (kernel_file.c, win32_compat.c): on failure, remove the old target (when replacing), close the handle's
+  descriptor for now (w32_handle_park; reopened at the same position on next use), retry, and log the outcome.
+
 ## 2026-11-06: Switch test 2: freezes after character select (looping audio)
 
 - Mark: both tries froze right after character select, before NOW LOADING; the second with the "broken record"

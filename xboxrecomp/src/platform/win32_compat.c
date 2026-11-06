@@ -635,6 +635,31 @@ const char *w32_handle_path(HANDLE h)
     return (o && o->kind == K_FILE) ? o->file_path : NULL;
 }
 
+/* CT3-nx: close a file handle's descriptor for now (it is reopened at the
+ * same position on next use). The Switch's FAT driver will not rename an
+ * open file (Crazy Taxi 3 renames its cache copy while it is open). */
+int w32_handle_park(HANDLE h)
+{
+    w32_object *o = obj_from(h);
+    int r = 0;
+    if (!o || o->kind != K_FILE || !o->file_path)
+        return 0;
+    pthread_mutex_lock(&s_fd_mx);
+    if (!o->fd_evicted && o->fd >= 0) {
+        off_t pos = lseek(o->fd, 0, SEEK_CUR);
+        close(o->fd);
+        o->fd = -1;
+        o->fd_pos = pos > 0 ? pos : 0;
+        if (o->fd_flags < 0)
+            o->fd_flags = O_RDWR;
+        o->fd_evicted = 1;
+        s_fd_live--;
+        r = 1;
+    }
+    pthread_mutex_unlock(&s_fd_mx);
+    return r;
+}
+
 /* CT3-nx: a renamed file keeps its handle; the path a parked descriptor is
  * reopened by has to follow it. */
 void w32_handle_set_path(HANDLE h, const char *path)
