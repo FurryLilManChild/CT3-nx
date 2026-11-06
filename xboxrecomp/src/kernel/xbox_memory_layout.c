@@ -2106,6 +2106,12 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
                     FILE *f = (flag && *flag) ? fopen(flag, "w") : NULL;
                     if (f)
                         fclose(f);
+                    /* And one frame trace ([FTRACE] lines), as
+                     * tools/win/trace_frame.ps1 asks for by hand. */
+                    flag = getenv("RECOMP_FRAME_TRACE");
+                    f = (flag && *flag) ? fopen(flag, "w") : NULL;
+                    if (f)
+                        fclose(f);
                 }
                 fflush(stderr);
             }

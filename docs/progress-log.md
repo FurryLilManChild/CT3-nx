@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 7: the game runs, black window
+
+- Past the boot hangs: Vulkan up (AMD Radeon, 1280x720 swapchain), the game loop running at about 53 fps for the
+  rest of the minute, icalls from 190 million to 843 million, the main thread in D3D (0x00104B18 < 0x000A7361 <
+  0x0005EB16). A window opened about 20 to 30 s in (Mark), black; all 35 frame dumps black.
+- The executor: about one clear and one 4-index quad per frame (3,348 draws by the end), 0 textured, "x 0.0..0.0
+  y 0.0..0.0" in the CPU stats; two surfaces (0x00564000, 0x00690000, 640x480, pitch 2560) alternating; 238
+  distinct unhandled methods. One FLIP_STALL at start.
+- Two stubs ran: 0x000C5EE0 (a real function, from the callback runner sub_000B97E0, table 0x002E0760) and
+  0x000C0946 (a lone `ret`, which the stub already does). 0x000C5EE0 and the other 14 tail-jump targets with clean
+  starts outside any function are now seeded (190 unresolved, from 205).
+- The watchdog's first periodic line now also arms one frame trace (RECOMP_FRAME_TRACE, [FTRACE] lines), as
+  trace_frame.ps1 does by hand.
+
 ## 2026-11-05: PC boot test 6 (all-threads dump): the idle thread
 
 - The dump answered it. [GIL] holder tid 224644 for the whole run (tickets next 37003, serving 36999: four

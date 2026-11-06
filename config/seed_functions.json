@@ -1,11 +1,35 @@
 [
  {
+  "start": "0x0002A940",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
   "start": "0x00033640",
   "note": "seed_sweep.py [ret] 2026-11-05, reviewed by hand: .text: follows a ret with no padding, 16-byte aligned; not inside any known function; starts 'push ecx; push ebx'"
  },
  {
+  "start": "0x00034920",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000352C0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x00035BD0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
   "start": "0x00036180",
   "note": "PC boot test 2026-11-05: [STUB] unresolved 0x00036180 entered from 0x000E49AC. Follows NOP padding, 16-byte aligned, prologue sub esp,0xC; push esi; mov [esp+4],ecx (thiscall); reached by a tail jump from sub_000EEF40"
+ },
+ {
+  "start": "0x0003A6B0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000567A0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
  },
  {
   "start": "0x00064500",
@@ -32,8 +56,20 @@
   "note": "seed_sweep.py [data] 2026-11-05, reviewed by hand: pointer at 0x001D1810 (.data), follows padding or a ret; inside sub_000804D0; starts 'sub esp, 0x1c; push ebp'"
  },
  {
+  "start": "0x00080D10",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
   "start": "0x00081450",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x00081557 (push 0x81450); inside sub_00081380; starts 'sub esp, 8; push ebp'"
+ },
+ {
+  "start": "0x00085900",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x0008AF20",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
  },
  {
   "start": "0x0008DBC0",
@@ -82,6 +118,10 @@
  {
   "start": "0x000A1400",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x000A2BDD (push 0xa1400); not inside any known function; starts 'push ecx; push ebx'"
+ },
+ {
+  "start": "0x000A5BE0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
  },
  {
   "start": "0x000B33D0",
@@ -138,6 +178,26 @@
  {
   "start": "0x000C2000",
   "note": "seed_sweep.py [data] 2026-11-05, reviewed by hand: pointer at 0x001B9690 (.rdata), follows padding or a ret; not inside any known function; starts 'mov eax, dword ptr [esp + 8]; sub esp, 0x10'"
+ },
+ {
+  "start": "0x000C4A10",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000C5960",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000C5EE0",
+  "note": "PC boot test 7 (2026-11-05): [STUB] unresolved 0x000C5EE0 entered from 0x000B9816, an indirect call in sub_000B97E0, which runs the callbacks registered in the table at 0x002E0760 (function, argument; four per group). Prologue push ebx; push esi; push edi after NOP padding. Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000C8EA0",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
+ },
+ {
+  "start": "0x000D6A50",
+  "note": "Kickoff 2026-11-05: reached only by a jump from a tail_jump_alias copy, so the translator stubbed it; 16-byte aligned after NOP padding, a clean prologue, inside no known function. Seeded as a group after PC boot test 7, where one of them ran as a stub"
  },
  {
   "start": "0x000EFA70",
