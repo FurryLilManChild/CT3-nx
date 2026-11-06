@@ -803,6 +803,15 @@ void xbox_gil_resume(int depth)
     }
 }
 
+/* CT3-nx: is any other thread queued for the guest lock? Unlike
+ * g_gil_contended this ignores priority: CT3's idle thread runs at +2 and the
+ * lock flagged only waiters above it, so the main thread (in its wait for the
+ * loader) got a turn about three times a second (PC boot test 8). */
+int xbox_gil_others_waiting(void)
+{
+    return gil_enabled() && (s_gil_next - s_gil_serving) > 1;
+}
+
 /* RECOMP_SPIN_HINT's periodic yield: a poll loop waits for another thread,
  * an interrupt or a DPC -- all of which need the lock. */
 void recomp_spin_yield(void)

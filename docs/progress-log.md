@@ -1,5 +1,24 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 8: logos, then the loader starves
+
+- Mark saw the logos: Sega, a couple of others, Hitmaker. Then a black screen to the end of the run. New files
+  read: Media/ADX/adx0.afs and Sprites_us/gSprites.art. 29.7 fps to frame 301, then 2.6 to 3.2 fps.
+- Main thread: 0x00011ACE in sub_00011A98, the frame loop that polls GetExitCodeThread (0x000DE1F6) on the thread
+  at 0x002C1EF8 until it stops being STILL_ACTIVE (0x103): it waits for the loader.
+- Frame trace (taken during the black screen): a clear to FF000000 and two full-screen inline quads of colour
+  A0000000 (texture 80C55000 bound), 0.5,0.5 to 640.5,480.5: the game's own fade, not a renderer fault.
+- Dump: [GIL] holder tid 227084, contended 0, the idle thread in the hand-written sub_000B33D0 again; waiting in
+  gil_lock: sub_000B3410's thread (in NtResumeThread), sub_000B3480's (in a spin yield), the OHCI pad thread
+  and, between its turns, the main thread. The idle thread runs at +2 (KeSetBasePriorityThread on its KTHREAD at
+  boot); the guest lock flags a waiter as contended only when it outranks the holder, so RECOMP_PREEMPT rarely
+  fired and the main thread got a turn about three times a second.
+- What the idle thread is for, by the code: CRI's sound lock (0x000B32F0 / 0x000B3330) resumes it, a +2 busy loop,
+  to keep the lower sound threads (0x000B3410 at +1, 0x000B3480 at -2) off the CPU, and suspends it again on
+  unlock. Its counter 0x002E00C4 is read nowhere.
+- Fix: it hands the lock over whenever anyone is queued (xbox_gil_others_waiting, ticket gap; kernel_bridge.c).
+  Trade-off noted in the override: the lower sound threads can now run inside the sound lock.
+
 ## 2026-11-05: PC boot test 7: the game runs, black window
 
 - Past the boot hangs: Vulkan up (AMD Radeon, 1280x720 swapchain), the game loop running at about 53 fps for the
