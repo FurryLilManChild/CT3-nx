@@ -553,6 +553,42 @@ static uint32_t guest_thread_by_tid(DWORD tid)
     return k;
 }
 
+/* CT3-nx: a stand-in KTHREAD for a thread that has ended (see
+ * bridge_ObReferenceObjectByHandle): 0x130 bytes of guest heap, zeroed, with
+ * Header.SignalState (+4) 1 and ExitStatus (+0x120) the exit code. One per
+ * thread id, kept for the run, so a title polling every frame allocates once. */
+extern uint32_t xbox_HeapAlloc(uint32_t size, uint32_t align);
+static uint32_t guest_thread_ended_object(DWORD tid, DWORD code)
+{
+    static struct { DWORD tid; uint32_t va; } ended[GUEST_THREADS_MAX];
+    static SRWLOCK lock = SRWLOCK_INIT;
+    uint32_t va = 0;
+    int i, free_slot = -1;
+
+    AcquireSRWLockExclusive(&lock);
+    for (i = 0; i < GUEST_THREADS_MAX; i++) {
+        if (ended[i].tid == tid) { va = ended[i].va; break; }
+        if (free_slot < 0 && !ended[i].tid) free_slot = i;
+    }
+    if (!va) {
+        va = xbox_HeapAlloc(0x130, 16);
+        if (va) {
+            memset(XBOX_TO_NATIVE(va), 0, 0x130);
+            if (free_slot < 0) free_slot = (int)(tid % GUEST_THREADS_MAX);  /* full: reuse one */
+            ended[free_slot].tid = tid;
+            ended[free_slot].va = va;
+            fprintf(stderr, "  [KERNEL] thread tid %lu has ended (exit 0x%08lX): signalled KTHREAD at 0x%08X\n",
+                    (unsigned long)tid, (unsigned long)code, va);
+        }
+    }
+    if (va) {
+        BRIDGE_MEM32(va + 4) = 1;
+        BRIDGE_MEM32(va + 0x120) = (uint32_t)code;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return va;
+}
+
 /* Thread entry shim. Sets up the new thread's own simulated stack, pushes the
  * two Xbox start-context arguments plus the dummy return address the callee's
  * `ret` consumes, and runs. */
@@ -801,15 +837,6 @@ void xbox_gil_resume(int depth)
         gil_lock();
         t_gil_depth = depth;
     }
-}
-
-/* CT3-nx: is any other thread queued for the guest lock? Unlike
- * g_gil_contended this ignores priority: CT3's idle thread runs at +2 and the
- * lock flagged only waiters above it, so the main thread (in its wait for the
- * loader) got a turn about three times a second (PC boot test 8). */
-int xbox_gil_others_waiting(void)
-{
-    return gil_enabled() && (s_gil_next - s_gil_serving) > 1;
 }
 
 /* RECOMP_SPIN_HINT's periodic yield: a poll loop waits for another thread,
@@ -4932,7 +4959,19 @@ static void bridge_ObReferenceObjectByHandle(void)
     } else {
         HANDLE h = bridge_resolve_handle(handle);
         DWORD tid = h ? GetThreadId(h) : 0;
-        if (tid) {
+        DWORD code = 0;
+        if (tid && GetExitCodeThread(h, &code) && code != 0x103u /* STILL_ACTIVE */) {
+            /* CT3-nx: a thread that has ended. guest_thread_forget dropped it
+             * from the table, so the wait below ran its full 200 ms and the
+             * object came back as 0 with STATUS_SUCCESS; XAPI's
+             * GetExitCodeThread (CT3 0x000DE1F6) then read SignalState at
+             * 0+4, saw 0 and reported STILL_ACTIVE forever. Crazy Taxi 3 waits
+             * that way for its loader after the logos (PC boot test 8: a black
+             * screen at 3 fps, 200 ms a frame). So an ended thread gets a
+             * signalled stand-in KTHREAD (one per thread, from the guest heap):
+             * Header.SignalState (+4) 1, ExitStatus (+0x120) its exit code. */
+            object = guest_thread_ended_object(tid, code);
+        } else if (tid) {
             /* A just-created thread registers itself when it starts running. */
             int tries;
             for (tries = 0; tries < 200 && !(object = guest_thread_by_tid(tid)); tries++)

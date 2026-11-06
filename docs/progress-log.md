@@ -8,16 +8,18 @@
   at 0x002C1EF8 until it stops being STILL_ACTIVE (0x103): it waits for the loader.
 - Frame trace (taken during the black screen): a clear to FF000000 and two full-screen inline quads of colour
   A0000000 (texture 80C55000 bound), 0.5,0.5 to 640.5,480.5: the game's own fade, not a renderer fault.
-- Dump: [GIL] holder tid 227084, contended 0, the idle thread in the hand-written sub_000B33D0 again; waiting in
-  gil_lock: sub_000B3410's thread (in NtResumeThread), sub_000B3480's (in a spin yield), the OHCI pad thread
-  and, between its turns, the main thread. The idle thread runs at +2 (KeSetBasePriorityThread on its KTHREAD at
-  boot); the guest lock flags a waiter as contended only when it outranks the holder, so RECOMP_PREEMPT rarely
-  fired and the main thread got a turn about three times a second.
-- What the idle thread is for, by the code: CRI's sound lock (0x000B32F0 / 0x000B3330) resumes it, a +2 busy loop,
-  to keep the lower sound threads (0x000B3410 at +1, 0x000B3480 at -2) off the CPU, and suspends it again on
-  unlock. Its counter 0x002E00C4 is read nowhere.
-- Fix: it hands the lock over whenever anyone is queued (xbox_gil_others_waiting, ticket gap; kernel_bridge.c).
-  Trade-off noted in the override: the lower sound threads can now run inside the sound lock.
+- Cause (found after a first, wrong fix): the thread at 0x002C1EF8 is boot thread #2 (ctx 0x0005E400), which ended
+  before the logos (PsTerminateSystemThread right after it started). guest_thread_forget drops an ended thread
+  from the runtime's table, so ObReferenceObjectByHandle waited its full 200 ms for the thread to register and then
+  returned object 0 with STATUS_SUCCESS; XAPI's GetExitCodeThread (0x000DE1F6) read SignalState at 0+4, saw 0,
+  returned STILL_ACTIVE. Every frame: 200 ms, so 3 fps, and the wait never ends.
+- First fix, withdrawn: the dump also showed the idle thread holding the guest lock with contended 0, and I read
+  the 3 fps as the +2 idle thread starving the main thread; commit 7b4de4c made it hand over to any waiter. That
+  was not the cause (the main thread spent its time in the 200 ms wait, not in gil_lock) and carried a real
+  trade-off, so it is reverted: sub_000B33D0 is back to RECOMP_PREEMPT.
+- Fix: an ended thread gets a signalled stand-in KTHREAD from the guest heap (Header.SignalState +4 = 1,
+  ExitStatus +0x120 = its exit code; one per thread id), and no 200 ms wait (kernel_bridge.c). Works on POSIX too
+  (win32_compat tracks exits). Linux and Windows checks clean.
 
 ## 2026-11-05: PC boot test 7: the game runs, black window
 

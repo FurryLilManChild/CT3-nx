@@ -83,27 +83,13 @@ typedef void (*recomp_func_t)(void);
  * nobody waits, a hand-over (and the point where a pending NtSuspendThread
  * from the sound lock 0x000B3330 stops it) when someone does. */
 extern void sub_000DE1E4(void);
-extern int xbox_gil_others_waiting(void);
 
-/* PC boot test 8: RECOMP_PREEMPT was not enough. The thread runs at +2 (boot
- * log: KeSetBasePriorityThread of its KTHREAD, 2), and the guest lock only
- * flags waiters that outrank the holder, so the main thread waiting for the
- * loader got the lock about three times a second (3 fps after the logos;
- * dump: this thread the holder with g_gil_contended 0 and four waiting). So it
- * hands over whenever anyone is queued. The counter 0x002E00C4 is written
- * here and read nowhere (capstone over every function), so how fast it counts
- * does not matter. Trade-off: on the Xbox this busy loop also kept the lower
- * sound threads (0x000B3410 at +1, 0x000B3480 at -2) off the CPU while the
- * sound lock is held; here they can take a turn then. */
 void sub_000B33D0(void)
 {
     eax = MEM32(0x002E00DCu);
     while (eax == 0) {
         MEM32(0x002E00C4u) = MEM32(0x002E00C4u) + 1;
-        if (xbox_gil_others_waiting())
-            recomp_spin_yield();
-        else
-            RECOMP_PREEMPT();
+        RECOMP_PREEMPT();
         eax = MEM32(0x002E00DCu);
     }
     PUSH32(esp, 0xF0000001u);
