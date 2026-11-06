@@ -31,7 +31,8 @@ $env:RECOMP_THREAD_DUMP = (Join-Path $repo 'out\threads.flag')
 $texDir = Join-Path $repo 'out\texdump'
 New-Item -ItemType Directory -Force -Path $texDir | Out-Null
 $env:RECOMP_TEXDUMP_DIR = $texDir
-foreach ($kv in $Env) {
+# Through -File, PowerShell hands "A=1","B=2" over as one string "A=1,B=2": split it again.
+foreach ($kv in (($Env -join ',') -split ',' | Where-Object { $_ })) {
     if ($kv -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($matches[1])" -Value $matches[2]; Write-Host "  test switch: $kv" }
 }
 if ($Shots) {

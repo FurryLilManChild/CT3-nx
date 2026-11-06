@@ -2066,6 +2066,39 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
     Sleep(s_watchdog_secs * 1000u);
     snprintf(why, sizeof why, "no exit after %us", s_watchdog_secs);
     watchdog_dump(why);
+    /* CT3-nx: RECOMP_WATCHDOG_EVERY=N: after the full dump, one line every N
+     * seconds with the main thread's esp and the return addresses on its
+     * stack (values in the XBE's code), so a run shows whether the thread is
+     * moving or looping. One snapshot could not tell a slow decode from a
+     * hang (PC boot test 3). Keeps the game running. */
+    {
+        const char *every = getenv("RECOMP_WATCHDOG_EVERY");
+        unsigned n = every ? (unsigned)atoi(every) : 0, t = s_watchdog_secs;
+        if (n) {
+            const uint8_t *mem = (const uint8_t *)g_memory_offset;
+            for (;;) {
+                uint32_t esp, i, shown = 0;
+                char line[512];
+                int len;
+                Sleep(n * 1000u);
+                t += n;
+                esp = s_watchdog_esp ? *s_watchdog_esp : 0;
+                len = snprintf(line, sizeof line, "[WATCHDOG] t=%us esp=%08X icalls=%llu chain:",
+                               t, esp, (unsigned long long)g_icall_count);
+                for (i = 0; i < 1024 && esp && shown < 14; i++) {
+                    uint32_t a = esp + i * 4, v;
+                    if (a < XBOX_STACK_BASE || a >= XBOX_STACK_TOP) break;
+                    v = *(const uint32_t *)(mem + a);
+                    if (v >= 0x00011000u && v < 0x0012A560u && len < (int)sizeof line - 12) {
+                        len += snprintf(line + len, sizeof line - len, " %08X", v);
+                        shown++;
+                    }
+                }
+                fprintf(stderr, "%s\n", line);
+                fflush(stderr);
+            }
+        }
+    }
     /* RECOMP_WATCHDOG_KEEP=1: a snapshot, not a verdict -- on a slow host
      * (a Switch) a healthy boot can still be loading at the deadline. */
     {

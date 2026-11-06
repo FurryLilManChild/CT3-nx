@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 3
+
+- The suspend fix holds: the main thread got past the sound lock (no hang in NtSuspendThread). It loaded
+  bank00/bank25 .art and .mdl, Partition5 _fcvdata.bin, C_TAXI03.SYS from the save, and the same sound setup.
+- "Closed by itself" was the watchdog's own _exit at 40 s: RECOMP_WATCHDOG_KEEP never arrived, because through
+  `powershell -File` an array argument "A=1","B=2" reaches the script as one string "A=1,B=2"
+  (run_game.ps1 now splits it again).
+- Watchdog snapshot: main thread esp 0x0097F9FC with 0x000D2FD4 on top: it was calling 0x000D2FC0, a wrapper of
+  0x000D2E60, an 8x8 double-precision DCT (table at 0x00333398): a JPEG or MPEG style decode, not a hang in itself.
+  Neither movie (Media/Movies/movie_LV.mov, movie_SA.mov) was opened. Still no GPU commands. Nearby, 0x000CBBD0
+  has a deliberate `jmp $` (0x000CBBF4) when an init call (0x000CE110) returns an error other than 0xFF03FF05.
+- One snapshot cannot tell slow work from a loop: RECOMP_WATCHDOG_EVERY=N now adds a line every N seconds with the
+  main thread's esp, icall count and stack return addresses.
+
 ## 2026-11-05: PC boot test 2 (watchdog), a suspend deadlock
 
 - Boot test with RECOMP_WATCHDOG_SECS=40: no failed indirect calls and no stubs any more; still no window.
