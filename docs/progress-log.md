@@ -1,5 +1,15 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 1: menus at full speed, NOW LOADING stalls
+
+- Mark: menus and character select at full speed (58 to 60 fps at 1224 MHz). Loading into a shift stuck twice on
+  NOW LOADING; one earlier try froze before it with looping audio (that run's log was overwritten).
+- The log: the loader worker opened Partition5\tmp (the bank10.mdl cache copy) at 67.8 s and nothing followed for
+  40 s while the game drew at 60 fps: the same stall as PC test 18, so the lock handover did not fix it.
+- Next: the contended guest-lock path polls (yield 5 ms, then 1 ms sleeps) instead of a blocking host wait, and
+  past 2 s names the lock, the holder, where it was taken and the waiter's guest stack (RECOMP_CS_POLL=0: the old
+  wait). The Switch keeps the last two runs' logs (ct3_log_1.txt, ct3_log_2.txt).
+
 ## 2026-11-06: first Switch build
 
 - Toolchain on this cloud machine: Mark's C:\devkitPro (zipped into out\, 1.4 GB, staged in four parts) under

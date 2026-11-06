@@ -513,8 +513,48 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
     }
     {
         XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
+        static int poll = -1;
+        if (poll < 0) { const char *e = getenv("RECOMP_CS_POLL"); poll = !(e && *e == '0'); }
         if (slot) InterlockedIncrement(&slot->waiters);
-        EnterCriticalSection(cs);
+        if (!poll) {
+            EnterCriticalSection(cs);
+        } else {
+            /* CT3-nx, PC play test 18 and Switch test 1: Crazy Taxi 3's loader
+             * worker stalled for good in this wait (NOW LOADING never ended,
+             * the main thread kept drawing at 60 fps), and a blocked host wait
+             * cannot say on what. So the contended path polls (yield, then
+             * 1 ms sleeps) and, past 2 s and every 5 s after, names the lock,
+             * its holder and where the holder took it, with this thread's
+             * guest stack. Polling also cannot miss a wakeup. RECOMP_CS_POLL=0
+             * blocks as before. */
+            LARGE_INTEGER f, t0, t;
+            LONGLONG next_report;
+            unsigned spins = 0;
+            QueryPerformanceFrequency(&f);
+            QueryPerformanceCounter(&t0);
+            next_report = t0.QuadPart + 2 * f.QuadPart;
+            (void)spins;
+            while (!TryEnterCriticalSection(cs)) {
+                /* Yield for the first 5 ms (a Windows Sleep(1) can last
+                 * 15 ms, long enough to lose the handover), then sleep. */
+                QueryPerformanceCounter(&t);
+                if (t.QuadPart - t0.QuadPart < f.QuadPart / 200) SwitchToThread(); else Sleep(1);
+                if (t.QuadPart >= next_report) {
+                    static LONG reports;
+                    if (InterlockedIncrement(&reports) <= 40) {
+                        fprintf(stderr, "  [CS] thread %lu waiting %.1f s on guest lock 0x%08X: "
+                                        "holder thread %lu took it at guest 0x%08X (depth %ld), %ld waiting\n",
+                                GetCurrentThreadId(), (double)(t.QuadPart - t0.QuadPart) / f.QuadPart,
+                                (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
+                                slot ? slot->owner_tid : 0ul, slot ? slot->owner_site : 0u,
+                                slot ? slot->depth : 0l, slot ? slot->waiters : 0l);
+                        xbox_guest_backtrace(10);
+                        fflush(stderr);
+                    }
+                    next_report = t.QuadPart + 5 * f.QuadPart;
+                }
+            }
+        }
         if (slot) InterlockedDecrement(&slot->waiters);
     }
     xbox_cs_note_owner(cs);

@@ -361,6 +361,12 @@ static void *log_flusher(void *arg)
 static int log_open(void)
 {
     s_log_buf = (char *)malloc(LOG_CAP);
+    /* Keep the last two runs' logs (ct3_log_1.txt, ct3_log_2.txt): Mark tries
+     * a few times before copying the logs off, and a hang in the first try
+     * was gone by the time he did (Switch test 1). */
+    remove(NFSU2_SWITCH_DIR "/ct3_log_2.txt");
+    rename(NFSU2_SWITCH_DIR "/ct3_log_1.txt", NFSU2_SWITCH_DIR "/ct3_log_2.txt");
+    rename(NFSU2_SWITCH_DIR "/ct3_log.txt", NFSU2_SWITCH_DIR "/ct3_log_1.txt");
     s_log_fd = open(NFSU2_SWITCH_DIR "/ct3_log.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (!s_log_buf || s_log_fd < 0 || AddDevice(&s_log_dev) < 0)
         return 0;
