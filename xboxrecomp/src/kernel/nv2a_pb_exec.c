@@ -1165,6 +1165,35 @@ static void clear_surface(uint32_t param)
         if (!s_gpu.color_offset || !s_gpu.pitch || !s_gpu.clip_h || bpp == 0)
             return;
         current_surface(&surf);
+        /* CT3-nx, PC play test 18 ([FSUM]): Crazy Taxi 3's pause goes
+         * straight from a full frame (1095 draws, colour cleared) to frames
+         * that clear only depth and stencil and draw only the menu, over
+         * whatever the two flip buffers hold: the last two frames of the
+         * shift, a sixtieth of a second apart, shown in turn (the jitter).
+         * On the first such frame, copy the last full frame into this buffer
+         * so both hold the same picture. RECOMP_PAUSE_HOLD=0 turns it off. */
+        if (!(param & 0xF0) && !s_fsum_cur.cclears && !s_fsum_cur.draws && s_fsum_n
+            && s_backend->blit) {
+            static int hold = -1;
+            const unsigned last = (s_fsum_n - 1) % 6;
+            if (hold < 0) { const char *e = getenv("RECOMP_PAUSE_HOLD"); hold = !(e && *e == '0'); }
+            if (hold && s_fsum_ring[last].cclears && s_fsum_ring[last].draws >= 100
+                && s_fsum_ring[last].surf && s_fsum_ring[last].surf != surf.color_va) {
+                Nv2aBlit b;
+                static unsigned noted;
+                memset(&b, 0, sizeof b);
+                b.src_va = s_fsum_ring[last].surf;
+                b.dst_va = surf.color_va;
+                b.src_pitch = b.dst_pitch = s_gpu.pitch;
+                b.bpp = bpp;
+                b.w = s_gpu.clip_x + s_gpu.clip_w;
+                b.h = s_gpu.clip_y + s_gpu.clip_h;
+                s_backend->blit(&b);
+                if (noted++ < 3)
+                    fprintf(stderr, "  [PB] a frame without a colour clear after a full one: "
+                            "%08X copied to %08X first (RECOMP_PAUSE_HOLD)\n", b.src_va, b.dst_va);
+            }
+        }
         if (param & 0xF0) s_fsum_cur.cclears++;
         if (s_ftrace_on)
             fprintf(stderr, "[FTRACE] clear %08X surf %08X clip %u,%u %ux%u colour %08X z %08X\n",

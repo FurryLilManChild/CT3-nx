@@ -1,5 +1,22 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 18: stuck NOW LOADING again (thread dumps), and the pause
+
+- Stuck run, two thread dumps resolved with ct3_recomp.map: the loader worker (sub_000DE29D running
+  sub_000A05E0, then 0x000AE030, 0x000AB300, 0x000AB130, 0x000ACA40) waits in RtlEnterCriticalSection, in the
+  host EnterCriticalSection, in both dumps. The main thread is in its per-frame wait (sub_000F5250, D3D's event
+  at device + 0x2448) from 0x000A72F0, drawing NOW LOADING at 59 fps. The good runs' [CS] lines show main and the
+  worker trading lock 0x002D83C4 (main takes it at 0x000A0804). Reading: a host critical section wakes a waiter on
+  release but does not give it the lock, so main, which releases and re-takes it every frame, can win every time
+  and the worker starves. (Which lock the worker waits on is not in the dump; 0x002D83C4 is the likely one.)
+  Fix (kernel_rtl.c): a release with waiters waits up to 2 ms for a waiter to take the lock ("[CS] lock ...
+  handed over" lines, the first three).
+- Pause ([FSUM]): flip 2367 drew the full scene (1095 draws, colour cleared) into 80564000, flip 2366 into
+  80690000; from 2368 every frame is 51 draws with no colour clear, alternating buffers. So the menu is drawn
+  over two different frames in turn. Fix (nv2a_pb_exec.c): on the first frame that clears only depth/stencil
+  after a full frame on the other buffer, the last full frame is copied into this buffer first, so both show the
+  same picture. RECOMP_PAUSE_HOLD=0 turns it off.
+
 ## 2026-11-06: PC play test 17: the visual fixes hold; the pause screen
 
 - Mark: the counters, the character and car shadows and the hailing circles are right now.

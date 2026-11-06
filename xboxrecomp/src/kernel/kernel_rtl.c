@@ -203,6 +203,7 @@ typedef struct {
     volatile uint32_t      owner_site;
     volatile unsigned long owner_tid;
     volatile long          depth;
+    volatile long          waiters;     /* threads in the slow path of Enter */
 } XBOX_CS_SLOT;
 
 static XBOX_CS_SLOT g_cs_table[XBOX_CS_TABLE_SIZE];
@@ -510,7 +511,12 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
         xbox_guest_backtrace(10);
         fflush(stderr);
     }
-    EnterCriticalSection(cs);
+    {
+        XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
+        if (slot) InterlockedIncrement(&slot->waiters);
+        EnterCriticalSection(cs);
+        if (slot) InterlockedDecrement(&slot->waiters);
+    }
     xbox_cs_note_owner(cs);
     if (g_cs_contention_reports <= 16) {
         fprintf(stderr, "  [CS] thread %lu acquired 0x%08X\n",
@@ -526,9 +532,28 @@ VOID __stdcall xbox_RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
     CRITICAL_SECTION* cs = xbox_cs_shadow(CriticalSection);
     if (cs) {
         InterlockedIncrement(&g_cs_leaves);
+        XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
         crt_lock_trace("drop", CriticalSection);
         xbox_cs_clear_owner(cs);
         LeaveCriticalSection(cs);
+        /* Hand a contended lock over. A host critical section wakes a waiter
+         * on release but does not give it the lock, so a thread that
+         * releases and takes it again in a loop (Crazy Taxi 3's main thread,
+         * lock 0x002D83C4, every frame of NOW LOADING) wins every time and
+         * the waiter starves: the loader worker sat in Enter for good with
+         * the cache copy half done (PC play tests 16 and 18, thread dumps).
+         * On the Xbox the woken waiter takes it, so wait (up to 2 ms) for a
+         * waiter to take it before going on. */
+        if (slot && slot->waiters > 0 && slot->depth == 0) {
+            ULONGLONG until = GetTickCount64() + 2;
+            static long noted;
+            while (slot->waiters > 0 && slot->owner_tid == 0 && GetTickCount64() <= until)
+                SwitchToThread();
+            if (InterlockedIncrement(&noted) <= 3)
+                fprintf(stderr, "  [CS] lock 0x%08X handed over (%s)\n",
+                        (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
+                        slot->owner_tid ? "a waiter took it" : "no taker in 2 ms");
+        }
     }
 }
 
