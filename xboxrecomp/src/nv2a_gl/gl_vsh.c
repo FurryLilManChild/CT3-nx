@@ -611,9 +611,23 @@ const char *nv2a_gl_vsh_fixed(void)
         "    vec4 pos = v0;\n"
         "    if (u_xform == 1 && u_fogv[4].y > 0.5) {\n"
         "        sk = nv2a_skin(v0, v2.xyz, sk_e, sk_n);\n"
+        /* CT3-nx, PC play test 12 (frame trace of the character select):
+         * with skinning on, D3D 4531 loads the composite matrix with the
+         * projection and viewport only (rows 554 0 -320 320 / 0 -554 -240
+         * 240 / .. / 0 0 -1 1, the same for every skinned draw), while
+         * unskinned draws get model-view 0 x projection x viewport. So the
+         * hardware applies the composite to the blended eye position
+         * directly. The old step back to object space through inverse
+         * model-view 0 also had a zero fourth row there (D3D only loads the
+         * 3x3 used for normals), which gave w = 0: Axel's torso and legs
+         * (all skinned) were not drawn; head and hands (unskinned) were.
+         * u_sk[22].y = 1 (RECOMP_VK_SKIN_OBJ=1) keeps the old step. */
         "        if (sk > 0) {\n"
         "            vec4 eh = vec4(sk_e, 1.0);\n"
-        "            pos = eh.x * u_sk[9] + eh.y * u_sk[10] + eh.z * u_sk[11] + eh.w * u_sk[12];\n"
+        "            if (u_sk[22].y > 0.5)\n"
+        "                pos = eh.x * u_sk[9] + eh.y * u_sk[10] + eh.z * u_sk[11] + eh.w * u_sk[12];\n"
+        "            else\n"
+        "                pos = eh;\n"
         "        }\n"
         "    }\n"
         "    if (u_xform == 1) {\n"

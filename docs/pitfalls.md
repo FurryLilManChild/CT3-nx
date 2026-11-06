@@ -36,6 +36,16 @@ the rule.
     file the game never managed to open, because rename was unimplemented. A pattern that fits is not evidence.
     Rule: find the real error first, and know where every log goes (the game log and xbox_kernel.log).
 
+15. **Check how a runtime variable is kept up to date before using it as a clock.** Test 12 fix: I first timed
+    the CRI lock's give-up with the host's xbox_KeTickCount, which kernel_hal.c only updates when its own getter
+    runs, so the timeout could never have fired. Caught at the compile check. Rule: read the writer of any value
+    used for timing; here the live tick is the guest's KeTickCount at kernel data + 0x20.
+
+16. **Check what the game actually asked to draw before calling something missing.** Test 12: from the
+    screenshot I listed "D-pad and A button icons missing" in the text. The frame trace shows the plain letter D
+    drawn from the font, and the font holds no button pictures. Rule: a "missing" element needs a trace showing a
+    draw that failed or was skipped; otherwise ask how the original looks.
+
 ## Code generation and seeds
 
 6. **A sweep category that finds nothing is a red flag.** Kickoff: seed_sweep's immediate-reference sweep found 0,

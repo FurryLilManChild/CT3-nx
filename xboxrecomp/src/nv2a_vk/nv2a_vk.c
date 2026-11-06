@@ -3511,6 +3511,12 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
                 if (skin < 0) { const char *e = getenv("RECOMP_VK_SKIN"); skin = !(e && *e == '0'); }
                 vb->sk[22][0] = skin ? (float)(r[0x328 / 4] & 7) : 0.0f;
             }
+            {   /* RECOMP_VK_SKIN_OBJ=1: the old skinned position (back to
+                 * object space through inverse model-view 0); gl_vsh.c */
+                static int obj = -1;
+                if (obj < 0) { const char *e = getenv("RECOMP_VK_SKIN_OBJ"); obj = e && *e == '1'; }
+                vb->sk[22][1] = obj ? 1.0f : 0.0f;
+            }
             /* Lighting: per light 0x1000 + 0x80 i (the offsets lit_color
              * reads), SET_LIGHT_ENABLE_MASK 0x3BC, SCENE_AMBIENT 0xA10,
              * MATERIAL_ALPHA 0x3B4, LIGHTING_ENABLE 0x314, COLOR_MATERIAL

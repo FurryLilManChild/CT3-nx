@@ -1,5 +1,32 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC play test 12: crash moved into NOW LOADING; the character-select bodies
+
+- Mark: same run (West Coast, Arcade, a character); the character select still had Axel's torso and legs missing,
+  and the game crashed earlier, in the middle of NOW LOADING. He took a frame trace on the character select and a
+  screenshot.
+- No "[FILE] rename to" lines: the crash came before the cache copy, so the rename fix is not verified yet.
+- Crash: CRI's ring-buffer check in 0x000B8420 (on the +1 sound server's stack) found the read and write positions
+  out of step and called its error callback 0x000B8120 with -3. That callback is `jmp $` (an endless loop on the
+  Xbox, an unresolved indirect call here), and the game then called a wild pointer (0x2FC0). Cause: CRI's sound lock
+  0x000B32F0 / 0x000B3330 (count at 0x002E00BC) relies on thread priorities (the +1 server pre-empts the main
+  thread, and the +2 idle thread runs while the lock is held). Our guest lock hands over in turn whatever the
+  priority, so the main thread got in halfway through a server pass (0x000B97E0).
+- Fix: overrides of the lock, the unlock and the pass make the exclusion explicit (a pass waits while another
+  thread holds the lock; taking the lock waits for another thread's pass, giving up after 100 ms with a log line;
+  a pass waiting over 2 s is logged). The clock is the guest's KeTickCount at kernel data + 0x20, written every
+  millisecond by the tick thread.
+- Character select, from the frame trace: every draw of Axel's torso and legs is skinned (SET_SKIN_MODE 1 or 5),
+  and for those D3D 4531 loads the composite matrix with the projection and viewport only (the same matrix for
+  every skinned draw), while the unskinned draws (head, hands, sleeves) get model-view 0 x projection x viewport.
+  The Vulkan vertex shader took the blended eye position back to object space through inverse model-view 0 before
+  the composite; here that matrix's fourth row is zero, so w came out 0 and nothing drew. The shader now applies
+  the composite to the blended eye position directly (RECOMP_VK_SKIN_OBJ=1 for the old way). The frame trace now
+  also prints a skinned draw's vertex layout and first weights ("sattr").
+- The "missing button icons": the trace shows the game drawing the plain letter D from its font (texture
+  808FA000, decoded: letters, digits, arrows, no button pictures) and nothing skipped there. So no evidence of a
+  missing icon; to be checked against the original.
+
 ## 2026-11-05: PC play test 11: same crash; the real cause is a missing rename
 
 - Character select and NOW LOADING were very fast now (the read logging). The character-select glitches stayed. The

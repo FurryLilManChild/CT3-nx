@@ -97,6 +97,94 @@ void sub_000B33D0(void)
     PUSH32(esp, 0x000B3408u); RECOMP_ABI_CALL(0x000DE1E4u, sub_000DE1E4);
 }
 
+/* ── CRI's sound lock and server passes (0x000B32F0, 0x000B3330, 0x000B97E0)
+ *
+ * The lock 0x000B32F0 / unlock 0x000B3330 (count at 0x002E00BC) keeps the
+ * sound server threads out while the main thread changes shared sound state.
+ * On the Xbox it is built from priorities: the servers (0x000B3410 at +1,
+ * 0x000B3480 at -2) run their registered jobs through 0x000B97E0 (groups 2
+ * and 5, from 0x000B9840 and 0x000B9850); the +1 server pre-empts the main
+ * thread, so the main thread never gets in halfway through a pass; and while
+ * the lock is held the +2 idle thread is resumed, so no server runs either.
+ * The guest lock here hands over in turn at every yield point, whatever the
+ * priority, so the main thread did get in mid-pass. PC play test 12: CRI's
+ * ring-buffer check in 0x000B8420 found the read and write positions out of
+ * step and called its error callback 0x000B8120 (`jmp $`) with -3, on the
+ * +1 server's stack; the game then called a wild pointer and crashed during
+ * NOW LOADING.
+ *
+ * So the exclusion is made explicit: a pass does not start while another
+ * thread holds the lock, and taking the lock waits for another thread's pass
+ * to end. Both wait with the guest lock released. The lock's wait gives up
+ * after 100 ms (logged): on the Xbox a server that blocks mid-pass does let
+ * the main thread in, and that must not become a deadlock here. A thread may
+ * take the lock inside its own pass, and run a pass inside its own lock. */
+extern void sub_000B32F0_gen(void);
+extern void sub_000B3330_gen(void);
+extern void sub_000B97E0_gen(void);
+/* Thread identity without host headers (this file builds for every host):
+ * the address of a thread-local variable is unique per thread. */
+static RECOMP_TLS char t_cri_me;
+#define CRI_ME ((uintptr_t)&t_cri_me)
+static uintptr_t s_cri_lock_owner;      /* thread that took the count from 0 */
+static uintptr_t s_cri_pass_owner;      /* thread inside 0x000B97E0 */
+static int       s_cri_pass_depth;
+
+/* The guest's KeTickCount (kernel data + 0x20), which xbox_memory_layout.c's
+ * tick thread writes every millisecond. (Not xbox_KeTickCount: that host
+ * copy is only updated on demand and stays 0.) */
+extern uint32_t g_xbox_kernel_data_base;
+static uint64_t cri_now_ms(void) { return MEM32(g_xbox_kernel_data_base + 0x20u); }
+
+void sub_000B32F0(void)                 /* lock */
+{
+    uintptr_t me = CRI_ME;
+    uint64_t give_up = cri_now_ms() + 100;
+
+    while (s_cri_pass_depth > 0 && s_cri_pass_owner != me) {
+        if (cri_now_ms() > give_up) {
+            static unsigned shown;
+            if (shown++ < 5)
+                fprintf(stderr, "[CRI] lock: a server pass still running after 100 ms; taking the lock anyway\n");
+            break;
+        }
+        recomp_spin_yield();
+    }
+    if (MEM32(0x002E00BCu) == 0)
+        s_cri_lock_owner = me;
+    sub_000B32F0_gen();
+}
+
+void sub_000B3330(void)                 /* unlock */
+{
+    sub_000B3330_gen();
+    if (MEM32(0x002E00BCu) == 0)
+        s_cri_lock_owner = 0;
+}
+
+void sub_000B97E0(void)                 /* one server pass over a job group */
+{
+    uintptr_t me = CRI_ME;
+
+    uint64_t note_at = cri_now_ms() + 2000;
+    int noted = 0;
+    while (MEM32(0x002E00BCu) > 0 && s_cri_lock_owner && s_cri_lock_owner != me) {
+        /* Faithful (on the Xbox no server runs while the lock is held), so no
+         * give-up here, but a long wait is logged so a hang shows its cause. */
+        if (!noted && cri_now_ms() > note_at) {
+            fprintf(stderr, "[CRI] pass: waiting over 2 s for the sound lock (count %u)\n",
+                    MEM32(0x002E00BCu));
+            noted = 1;
+        }
+        recomp_spin_yield();
+    }
+    s_cri_pass_depth++;
+    s_cri_pass_owner = me;
+    sub_000B97E0_gen();
+    if (--s_cri_pass_depth == 0)
+        s_cri_pass_owner = 0;
+}
+
 /* ── D3D fence wait, BlockOnTime (0x000F86C0) ─────────────────
  *
  * Stdcall (fence at [esp+4], flags at [esp+8], ret 8). The device is the

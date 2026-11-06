@@ -3570,6 +3570,19 @@ static void raw_batch(void)
                     reg_f(0x0480), reg_f(0x0484), reg_f(0x0488), reg_f(0x048C),
                     reg_f(0x0490), reg_f(0x0494), reg_f(0x0498), reg_f(0x049C),
                     reg_f(0x04A0), reg_f(0x04A4), reg_f(0x04A8), reg_f(0x04AC));
+            if (rb.xform == 1 && (s_reg[0x0328 / 4] & 7)) {
+                /* CT3-nx: a skinned draw's vertex layout (weights in 1,
+                 * normal in 2) and the first vertex's weights. */
+                uint32_t a;
+                float wv[4] = {0};
+                fprintf(stderr, "[FTRACE]   sattr");
+                for (a = 0; a < 16; a++)
+                    if (s_gpu.attr[a].size)
+                        fprintf(stderr, " %u:t%u s%u st%u @%X", a, s_gpu.attr[a].type, s_gpu.attr[a].size,
+                                s_gpu.attr[a].stride, s_gpu.attr[a].offset & 0xFFFu);
+                fetch_attr(&s_gpu.attr[1], s_gpu.idx_count ? s_gpu.idx[0] : 0, wv);
+                fprintf(stderr, " | w0 %g %g %g %g\n", wv[0], wv[1], wv[2], wv[3]);
+            }
             {   /* CT3-nx: texgen and texture matrices per enabled stage */
                 int ts;
                 for (ts = 0; ts < 4; ts++) {
