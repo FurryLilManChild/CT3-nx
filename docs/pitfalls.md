@@ -52,6 +52,12 @@ the rule.
     the threads on each side (here, both servers and the main thread), what the original lets overlap, keep
     nesting per thread, and give any new wait a counter so its cost shows in the log.
 
+18. **Every stub line right before a crash is a suspect, whatever its "entered from" says.** Test 10: I waved
+    off `[STUB] unresolved 0x000800AF entered from 0x002B4CC0` as a call through a garbage pointer, because the
+    return address was in .data. It was the cause: a function cut in half, its branch to the epilogue sent to a
+    stub. It cost tests 11 to 14 their crash diagnosis. Rule: disassemble every stubbed address seen in a run and
+    say what it is (here, two seconds of work: 0x000800AF is `pop ebx; add esp, 0x18; ret`).
+
 ## Code generation and seeds
 
 6. **A sweep category that finds nothing is a red flag.** Kickoff: seed_sweep's immediate-reference sweep found 0,

@@ -662,6 +662,17 @@ class FunctionDetector:
                              or self.engine.probes_as_constant_stub(target)
                              or self.engine.probes_as_vcall_thunk(target))):
                 continue
+            # Nor one that the instruction before it falls into. Crazy Taxi
+            # 3's 0x0007FF70 is reached only through a data table, so it was
+            # not known yet when `mov ecx, 0x80000`-style constants were
+            # probed, and 0x00080000 (inside it, right after `add eax, 0x18`)
+            # became a function: 0x0007FF70 was cut short, its `jne 0x800AF`
+            # went to a stub, the stack came back unbalanced and the city
+            # crashed as it first drew (PC play tests 10 to 14). A real start
+            # follows a ret, a jmp or padding; keep the prologue exception.
+            if (self._fallen_into(target)
+                    and not self.engine.probes_as_prologue(target)):
+                continue
             # A ret, not merely a terminator: an immediate is weak evidence,
             # so the probe has to reject data that happens to disassemble. The
             # cap also keeps a wrong guess from walking the rest of the section.
@@ -693,6 +704,20 @@ class FunctionDetector:
         if found:
             print(f"  {found} function address(es) taken as an immediate")
         return found > 0
+
+    def _fallen_into(self, addr: int) -> bool:
+        """True when a decoded instruction ends exactly at `addr` and execution
+        carries on past it (not a ret, jmp, int3, hlt or nop padding)."""
+        for k in range(1, 16):
+            insn = self.engine.instructions.get(addr - k)
+            if insn is None or insn.size != k:
+                continue
+            if insn.is_ret or insn.is_jump or insn.is_nop:
+                continue
+            if insn.mnemonic in ("int3", "hlt", "ud2"):
+                continue
+            return True
+        return False
 
     def _pass_tail_jump_targets(self, sections: List[SectionInfo]) -> bool:
         """

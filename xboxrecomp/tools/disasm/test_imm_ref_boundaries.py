@@ -68,3 +68,12 @@ def test_tail_jump_to_nowhere_known_is_not_a_function():
     det, sec, target = detector(_tail_body(7), 10)
     det._pass_imm_ref_targets([sec])
     assert target not in det._candidates
+
+
+def test_target_fallen_into_is_not_a_function():
+    # Crazy Taxi 3: `add eax, 0x18` falls into the referenced address, which
+    # is the middle of a function not found yet (0x00080000 in 0x0007FF70).
+    det, sec, target = detector(bytes.fromhex('83c018') + bytes.fromhex('85edc3'), 13)
+    assert det.engine.probes_as_returning_body(target)
+    det._pass_imm_ref_targets([sec])
+    assert target not in det._candidates

@@ -1,5 +1,22 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 14: character select fixed, the old crash at the start of a shift
+
+- Mark: the character select draws Axel whole now (the skinning fix). The game then crashed exactly where test 10
+  did, as the shift was about to begin.
+- Sound: the [CRI] stats lines are healthy (hundreds of passes and thousands of locks per 5 s, no give-ups, the
+  longest hold 16 ms). The rename ran: `[FILE] rename to Z:\_bank10.mdl (replace)`, and no read failed.
+- The crash is the same as test 10's to the byte (read of guest 0xB254FB34 in sub_0007F9D0, its argument a float
+  used as an object), with the same `[STUB] unresolved 0x000800AF` line just before it. So not the file reads.
+  0x000800AF is the epilogue of 0x0007FF70 (a city object's update, reached only through the table at 0x001D15D0).
+  disasm's imm_ref_target pass had made 0x00080000 a function (an immediate somewhere equals it), before 0x0007FF70
+  was known, so the gap test passed. 0x0007FF70 was cut at 0x00080000; its `jne 0x800AF` went to a stub that
+  returns at once, skipping `pop ebx; add esp, 0x18; ret`, and the next object update ran on a broken stack.
+- Fix (xboxrecomp/tools/disasm/functions.py): an immediate target that the instruction before it falls into is not
+  a function, unless it probes as a prologue; test added. The regen: 0x0007FF70 now runs to 0x000800C0 with
+  0x800AF an inner label; one other imm start dropped (0x003570F8); 22 function ends changed (the 0x0004B6E0
+  group too). 186 unresolved stubs, down from 188.
+
 ## 2026-11-06: PC play test 13: logos crawl, stuck at the Hitmaker logo
 
 - Mark: slow through the SEGA and other logos, then the Hitmaker logo stayed (frozen, or too slow to tell).
