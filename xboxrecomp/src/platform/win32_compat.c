@@ -635,6 +635,18 @@ const char *w32_handle_path(HANDLE h)
     return (o && o->kind == K_FILE) ? o->file_path : NULL;
 }
 
+/* CT3-nx: a renamed file keeps its handle; the path a parked descriptor is
+ * reopened by has to follow it. */
+void w32_handle_set_path(HANDLE h, const char *path)
+{
+    w32_object *o = obj_from(h);
+    if (!o || !path) return;
+    pthread_mutex_lock(&o->lock);
+    free(o->file_path);
+    o->file_path = strdup(path);
+    pthread_mutex_unlock(&o->lock);
+}
+
 BOOL CloseHandle(HANDLE h)
 {
     if (!h || h == PSEUDO_CURRENT_THREAD || h == PSEUDO_CURRENT_PROCESS ||

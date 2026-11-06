@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC play test 11: same crash; the real cause is a missing rename
+
+- Character select and NOW LOADING were very fast now (the read logging). The character-select glitches stayed. The
+  game crashed at exactly the same spot, with the same six failed reads.
+- My test-10 diagnosis was wrong (pitfalls 14). The warning the new code writes went to out/pc/xbox_kernel.log:
+  `NtReadFile FAILED: handle=FFFFFFFFFFFFFFFF ... err=6`, invalid handle, on all six. The only failed open of the run:
+  Partition5\_bank10.mdl (err 2). Just before it: Partition5\tmp written, then `NtSetInformationFile: unhandled
+  class 10`. The game copies a cache file to Partition5\tmp and renames it (FileRenameInformation) to its real
+  name; with no rename, _bank10.mdl never existed, its open returned -1, and the city streamed from that handle.
+- Fix: FileRenameInformation, decoded in bridge_NtSetInformationFile (+0 ReplaceIfExists, +4 RootDirectory,
+  +8 OBJECT_STRING name), done by xbox_RenameOpenFile: Windows by handle (SetFileInformationByHandle
+  FileRenameInfo), then MoveFileEx, then a copy; POSIX rename() with the handle's stored path updated
+  (w32_handle_set_path). Each rename is logged. The FILE_FLAG_NO_BUFFERING change stays, with its comment corrected.
+
 ## 2026-11-05: PC play test 10: menus, character select, the city, a crash
 
 - First play.ps1 run. Mark: main menu, West Coast, Arcade, character select (graphical glitches, slow), a character

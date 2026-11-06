@@ -4554,6 +4554,37 @@ static void bridge_NtSetInformationFile(void)
         g_eax = 0xC0000005u;                 /* STATUS_ACCESS_VIOLATION */
         return;
     }
+    if (infoclass == 10 && length >= 16) {
+        /* CT3-nx: FileRenameInformation. The Xbox struct holds a guest pointer,
+         * so it is decoded here: +0 ReplaceIfExists (BOOLEAN), +4 RootDirectory,
+         * +8 FileName (OBJECT_STRING: USHORT Length, USHORT MaximumLength,
+         * PCHAR Buffer at +12). Crazy Taxi 3 copies each cache file to
+         * Partition5\tmp and renames it to its real name (_bank10.mdl); with the
+         * class unhandled the rename never happened, the open of _bank10.mdl
+         * failed, and the game streamed the city from handle -1 (Win32 error 6
+         * on every read) and crashed as the world drew (PC play tests 10, 11). */
+        extern NTSTATUS xbox_RenameOpenFile(HANDLE h, const char *xbox_target, BOOLEAN replace);
+        uint8_t  replace = BRIDGE_MEM8(info_va + 0);
+        uint32_t root    = BRIDGE_MEM32(info_va + 4);
+        uint16_t nlen    = BRIDGE_MEM16(info_va + 8);
+        uint32_t nbuf    = BRIDGE_MEM32(info_va + 12);
+        char name[512];
+        NTSTATUS st;
+
+        if (!nbuf || !nlen || nlen >= sizeof name || !bridge_buf_ok(nbuf, nlen, "rename")) {
+            st = (NTSTATUS)0xC000000Du;                   /* STATUS_INVALID_PARAMETER */
+        } else {
+            memcpy(name, XBOX_TO_NATIVE(nbuf), nlen);
+            name[nlen] = 0;
+            st = xbox_RenameOpenFile(handle, name, replace);
+            fprintf(stderr, "  [FILE] rename to %s%s (root 0x%08X): 0x%08X\n",
+                    name, replace ? " (replace)" : "", root, (uint32_t)st);
+            fflush(stderr);
+        }
+        bridge_write_iostatus(ios_va, st, 0);
+        g_eax = (uint32_t)st;
+        return;
+    }
     g_eax = (uint32_t)xbox_NtSetInformationFile(handle, &ios,
                 XBOX_TO_NATIVE(info_va), length,
                 (XBOX_FILE_INFORMATION_CLASS)infoclass);

@@ -141,6 +141,7 @@ int         w32_handle_fd_parked(HANDLE h);
 void        w32_fd_shed(void);
 int         w32_handle_fd(HANDLE h);
 const char *w32_handle_path(HANDLE h);
+void        w32_handle_set_path(HANDLE h, const char *path);   /* CT3-nx: after a rename */
 
 /* ---- Events ----------------------------------------------------------- */
 HANDLE CreateEventA(LPSECURITY_ATTRIBUTES sa, BOOL manualReset, BOOL initialState, LPCSTR name);

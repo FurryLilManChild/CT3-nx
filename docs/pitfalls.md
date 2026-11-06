@@ -30,6 +30,12 @@ the rule.
 5. **Disassemble a function before naming it.** Test 3: I called 0x000D2E60 a sprintf-style formatter from the shape
    of its caller; it was an 8x8 DCT. Rule: no label for a function until its body has been read.
 
+14. **Get the error code before naming a cause.** Test 10: the failed reads' offsets were all multiples of 512 but
+    not 4096, so I blamed unbuffered I/O and shipped a fix. The Win32 error was already being logged, as a warning,
+    but to out/pc/xbox_kernel.log, not the game log; it said error 6, invalid handle (the handle was -1): a cache
+    file the game never managed to open, because rename was unimplemented. A pattern that fits is not evidence.
+    Rule: find the real error first, and know where every log goes (the game log and xbox_kernel.log).
+
 ## Code generation and seeds
 
 6. **A sweep category that finds nothing is a red flag.** Kickoff: seed_sweep's immediate-reference sweep found 0,

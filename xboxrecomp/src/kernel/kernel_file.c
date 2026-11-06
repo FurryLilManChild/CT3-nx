@@ -189,10 +189,9 @@ NTSTATUS __stdcall xbox_NtCreateFile(
         /* CT3-nx: FILE_NO_INTERMEDIATE_BUFFERING is not passed on. On the
          * Xbox it is a hint and titles align to its 512-byte sectors; Windows'
          * FILE_FLAG_NO_BUFFERING is a contract to the host drive's sector size
-         * (4096 on Mark's SSD), so Crazy Taxi 3's streaming reads at offsets
-         * like 16896 and 5308416 failed (ERROR_INVALID_PARAMETER class: 0
-         * bytes, STATUS_UNSUCCESSFUL), the city was built from empty buffers
-         * and the game crashed as the world drew (PC play test 10). */
+         * (often 4096), which a 512-aligned read can break. (Added for PC play
+         * test 10, whose failed reads turned out to have another cause: a
+         * missing rename, see xbox_RenameOpenFile. Kept as the safer mapping.) */
         if (FileAttributes & XBOX_FILE_ATTRIBUTE_READONLY)
             flags_and_attrs |= FILE_ATTRIBUTE_READONLY;
         h = CreateFileW(win_path, xbox_access_to_win32(DesiredAccess),
@@ -277,6 +276,36 @@ NTSTATUS __stdcall xbox_NtReadFile(
     IoStatusBlock->Status = STATUS_UNSUCCESSFUL;
     IoStatusBlock->Information = 0;
     return STATUS_UNSUCCESSFUL;
+}
+
+/* CT3-nx: rename an open file (FileRenameInformation; kernel_bridge.c decodes
+ * the guest struct). The target is an Xbox path. Windows renames by handle
+ * when the handle has DELETE access, as an Xbox MoveFile opens it; otherwise
+ * by path (MoveFileEx), and as a last resort by copy, so the title finds its
+ * file under the new name either way. */
+NTSTATUS xbox_RenameOpenFile(HANDLE h, const char *xbox_target, BOOLEAN replace)
+{
+    WCHAR dst[MAX_PATH], src[MAX_PATH];
+    union { FILE_RENAME_INFO fri; BYTE raw[sizeof(FILE_RENAME_INFO) + MAX_PATH * sizeof(WCHAR)]; } u;
+    DWORD n;
+
+    if (!xbox_translate_path(xbox_target, dst, MAX_PATH))
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    n = (DWORD)wcslen(dst);
+    memset(&u, 0, sizeof u);
+    u.fri.ReplaceIfExists = replace ? TRUE : FALSE;
+    u.fri.FileNameLength = n * sizeof(WCHAR);
+    memcpy(u.fri.FileName, dst, (n + 1) * sizeof(WCHAR));
+    if (SetFileInformationByHandle(h, FileRenameInfo, &u, sizeof(FILE_RENAME_INFO) + n * sizeof(WCHAR)))
+        return STATUS_SUCCESS;
+    if (GetFinalPathNameByHandleW(h, src, MAX_PATH, FILE_NAME_NORMALIZED)) {
+        if (MoveFileExW(src, dst, replace ? MOVEFILE_REPLACE_EXISTING : 0))
+            return STATUS_SUCCESS;
+        if (CopyFileW(src, dst, replace ? FALSE : TRUE))
+            return STATUS_SUCCESS;
+    }
+    xbox_log(XBOX_LOG_WARN, XBOX_LOG_FILE, "rename to %S failed: err=%u", dst, GetLastError());
+    return replace ? STATUS_UNSUCCESSFUL : STATUS_OBJECT_NAME_COLLISION;
 }
 
 NTSTATUS __stdcall xbox_NtWriteFile(
@@ -1015,6 +1044,26 @@ NTSTATUS __stdcall xbox_NtReadFile(
         xbox_file_read_hook(Buffer, (size_t)n, pos);
     IoStatusBlock->Status = STATUS_SUCCESS;
     if (Event) SetEvent(Event);
+    return STATUS_SUCCESS;
+}
+
+/* CT3-nx: rename an open file (see the Windows version). POSIX renames by
+ * path; the handle's stored path follows, since a parked descriptor is
+ * reopened by it. */
+NTSTATUS xbox_RenameOpenFile(HANDLE h, const char *xbox_target, BOOLEAN replace)
+{
+    char dst[MAX_PATH];
+    const char *src = w32_handle_path(h);
+
+    if (!src || !xbox_translate_path(xbox_target, dst, MAX_PATH))
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    if (!replace && access(dst, F_OK) == 0)
+        return STATUS_OBJECT_NAME_COLLISION;
+    if (rename(src, dst) != 0) {
+        XBOX_TRACE(XBOX_LOG_FILE, "rename %s -> %s errno=%d", src, dst, errno);
+        return STATUS_UNSUCCESSFUL;
+    }
+    w32_handle_set_path(h, dst);
     return STATUS_SUCCESS;
 }
 
