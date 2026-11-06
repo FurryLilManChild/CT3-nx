@@ -58,6 +58,8 @@ pushes need his explicit consent.
 - Every hand-written override in `src/recomp_manual.c` and every seed in `config/seed_functions.json` carries its
   evidence (which run or tool found it, callers, addresses).
 - Log each session in `docs/progress-log.md` (newest first).
+- Add every mistake or wrong conclusion to `docs/pitfalls.md` as it happens (Mark, 2026-11-05); review it with
+  him when wrapping up, then fold it into the port skills.
 
 ## Layout
 
