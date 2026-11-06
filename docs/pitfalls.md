@@ -58,6 +58,10 @@ the rule.
     stub. It cost tests 11 to 14 their crash diagnosis. Rule: disassemble every stubbed address seen in a run and
     say what it is (here, two seconds of work: 0x000800AF is `pop ebx; add esp, 0x18; ret`).
 
+19. **Know the resolution of the clock a short timeout uses.** Test 18 fix: the lock handover waited "2 ms"
+    with GetTickCount64, which advances in 15.6 ms steps on Windows, so the wait was anything from 0 to 16 ms.
+    Rule: sub-frame timeouts use the performance counter.
+
 ## Code generation and seeds
 
 6. **A sweep category that finds nothing is a red flag.** Kickoff: seed_sweep's immediate-reference sweep found 0,

@@ -1,5 +1,14 @@
 # Progress log (newest first)
 
+## 2026-11-06: PC play test 19: pause fixed
+
+- Mark: the pause picture holds still (and on his original Xbox it does too, so the jitter was ours). He also saw
+  none of the slight tearing from earlier runs (not explained by anything here; noted).
+- Log: three "RECOMP_PAUSE_HOLD" copies (three pauses); one load, cache copy and rename done; lock 0x002D83C4
+  handed to a waiter once ("a waiter took it"); lock 0x00122C08 twice "no taker in 2 ms". 57 to 59 fps in play.
+- The handover's 2 ms was timed with GetTickCount64, which ticks every 15.6 ms on Windows; now the performance
+  counter.
+
 ## 2026-11-06: PC play test 18: stuck NOW LOADING again (thread dumps), and the pause
 
 - Stuck run, two thread dumps resolved with ct3_recomp.map: the loader worker (sub_000DE29D running

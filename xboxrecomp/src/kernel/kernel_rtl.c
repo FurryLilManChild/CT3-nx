@@ -545,10 +545,17 @@ VOID __stdcall xbox_RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
          * On the Xbox the woken waiter takes it, so wait (up to 2 ms) for a
          * waiter to take it before going on. */
         if (slot && slot->waiters > 0 && slot->depth == 0) {
-            ULONGLONG until = GetTickCount64() + 2;
+            /* The performance counter, not GetTickCount64: that ticks every
+             * 15.6 ms on Windows, so "2 ms" was anything from 0 to 16. */
+            LARGE_INTEGER f, t, until;
             static long noted;
-            while (slot->waiters > 0 && slot->owner_tid == 0 && GetTickCount64() <= until)
+            QueryPerformanceFrequency(&f);
+            QueryPerformanceCounter(&until);
+            until.QuadPart += f.QuadPart / 500;
+            do {
                 SwitchToThread();
+                QueryPerformanceCounter(&t);
+            } while (slot->waiters > 0 && slot->owner_tid == 0 && t.QuadPart < until.QuadPart);
             if (InterlockedIncrement(&noted) <= 3)
                 fprintf(stderr, "  [CS] lock 0x%08X handed over (%s)\n",
                         (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
