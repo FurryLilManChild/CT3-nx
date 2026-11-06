@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 4 (1785 MHz): crash after character select
+
+- Mark: "an error happened" after character select. The log: the PC play test 12 crash again. [ICALL] 0x000B8120
+  (the SJ ring check 0x000B8420's error callback, `jmp $`) called from 0x000B84CC with -3, on the +1 server's
+  stack (esp 0x01FB9F64), then a wild call to 0x2400 and the crash.
+- Earlier in the run the CRI lock gave up on a running pass eight times (four lines shown, the cap was five)
+  around 15 to 18 s. A give-up is the one way left for the main thread to take the sound lock mid-pass, which
+  is what corrupted the ring in test 12. Whether one happened just before the crash is not in the log (the
+  5 s stats window that would show it had not closed).
+- Change: wait up to 1 s (not 100 ms) for a pass before giving up, show up to 20 give-ups, and with each, what the
+  pass threads are doing (their current kernel call). Not proven to be the cause; the next log says.
+
 ## 2026-11-06: Switch test 3: in game, but the city has no geometry
 
 - Mark: into a shift this time (no freeze, so the CRI holder report did not fire). The taxi, traffic and people

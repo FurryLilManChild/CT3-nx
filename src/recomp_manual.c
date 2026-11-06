@@ -121,7 +121,7 @@ void sub_000B33D0(void)
  * passes can overlap (the +1 pre-empts the -2 mid-pass).
  *
  * So: taking the lock fresh (count 0) outside a pass waits for every running
- * pass to end (giving up after 100 ms, logged; a server blocked mid-pass lets
+ * pass to end (giving up after 1 s, logged; a server blocked mid-pass lets
  * the main thread in on the Xbox too). A pass started outside a pass waits
  * while a thread other than this one holds the lock. Nested calls never
  * wait. PC play test 13: the first version waited on the most recent pass of
@@ -142,6 +142,7 @@ static uint32_t  s_cri_lock_caller;        /* its return address */
 static uint64_t  s_cri_lock_since;
 static int       s_cri_active;             /* threads inside a pass */
 static uintptr_t s_cri_lock_key;           /* xbox_thread_key() of the holder */
+static uintptr_t s_cri_pass_key[2];        /* the threads inside a pass now */
 static uint32_t  s_cri_lock_stack[48];     /* its guest stack when it took the lock */
 extern uintptr_t xbox_thread_key(void);
 extern void xbox_thread_state_print(uintptr_t key, const char *who);
@@ -203,12 +204,23 @@ void sub_000B32F0(void)                 /* lock */
     if (cri_excl() && MEM32(0x002E00BCu) == 0 && t_cri_pass_depth == 0 && s_cri_active > 0) {
         s_cri_st.lock_waits++;
         while (s_cri_active > 0) {
-            if (cri_now_ms() > t0 + 100) {
+            /* Switch test 4: the PC crash of play test 12 again (the SJ ring
+             * check 0x000B8420 calling its error callback with -3 on the +1
+             * server's stack), on a run with eight 100 ms give-ups (only the
+             * first five shown). Giving up is the one way left for the main
+             * thread to get in mid-pass, so wait longer (1 s) and say what
+             * each pass thread is doing when it does happen. */
+            if (cri_now_ms() > t0 + 1000) {
                 static unsigned shown;
+                int k;
                 s_cri_st.lock_giveups++;
-                if (shown++ < 5)
-                    fprintf(stderr, "[CRI] lock from %08X: a server pass still running after 100 ms; "
+                if (shown++ < 20) {
+                    fprintf(stderr, "[CRI] lock from %08X: a server pass still running after 1 s; "
                             "taking the lock anyway\n", caller);
+                    for (k = 0; k < 2; k++)
+                        if (s_cri_pass_key[k])
+                            xbox_thread_state_print(s_cri_pass_key[k], "[CRI]   a pass thread");
+                }
                 break;
             }
             recomp_spin_yield();
@@ -266,11 +278,18 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
             s_cri_st.pass_wait_ms += cri_now_ms() - t0;
         }
         s_cri_active++;
+        {   /* note this pass thread for the give-up report */
+            int k; uintptr_t key = xbox_thread_key();
+            for (k = 0; k < 2; k++) if (!s_cri_pass_key[k]) { s_cri_pass_key[k] = key; break; }
+        }
     }
     t_cri_pass_depth++;
     sub_000B97E0_gen();
-    if (--t_cri_pass_depth == 0)
+    if (--t_cri_pass_depth == 0) {
+        int k; uintptr_t key = xbox_thread_key();
+        for (k = 0; k < 2; k++) if (s_cri_pass_key[k] == key) s_cri_pass_key[k] = 0;
         s_cri_active--;
+    }
 }
 
 /* ── D3D fence wait, BlockOnTime (0x000F86C0) ─────────────────
