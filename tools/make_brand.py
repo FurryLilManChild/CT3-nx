@@ -32,8 +32,8 @@ def icon(path, ttf):
     im = Image.new("RGB", (256, 256), BG)
     d = ImageDraw.Draw(im)
     d.rectangle((8, 8, 247, 247), outline=DIM, width=4)
-    centered(d, 66, "SONIC", font(ttf, 48), FG, 256)
-    centered(d, 128, "HEROES", font(ttf, 40), FG, 256)
+    centered(d, 66, "CRAZY", font(ttf, 48), FG, 256)
+    centered(d, 128, "TAXI 3", font(ttf, 44), FG, 256)
     centered(d, 204, "Xbox recomp", font(ttf, 20), DIM, 256)
     im.save(path, quality=92)
 
@@ -42,7 +42,7 @@ def logo(path, ttf):
     w, h = 640, 128
     im = Image.new("RGB", (w, h), BG)
     d = ImageDraw.Draw(im)
-    centered(d, 18, "SONIC HEROES", font(ttf, 56), FG, w)
+    centered(d, 18, "CRAZY TAXI 3", font(ttf, 56), FG, w)
     centered(d, 88, "CT3-nx", font(ttf, 22), DIM, w)
     px = [im.getpixel((x, y)) for y in range(h) for x in range(w)]
     runs = []

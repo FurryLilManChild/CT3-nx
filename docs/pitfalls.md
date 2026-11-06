@@ -96,6 +96,18 @@ the rule.
     lock for good, and the translator's poll-loop marking skipped it because it counts instead of only polling.
     Rule: look for call-free loops in thread entry functions.
 
+21. **Rebrand every generated asset at kickoff, not only the code.** The Switch icon and loading-screen logo
+    (tools/make_brand.py, switch/icon.jpg, src/ct3_logo.h) still said SONIC HEROES until the first Switch build.
+    Caught before shipping. Rule: grep the copied repo for the old game's name in tools and assets too, and
+    regenerate their outputs.
+
+## Working with Mark
+
+20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a
+    devkitPro zip, then told him to skip it for a downloaded toolchain image before checking I could use it; the
+    sandbox blocked running it, and I had to ask for the zip again. He got contradictory messages. Rule: try the
+    new route first, then change the plan in one message.
+
 ## Repo hygiene
 
 12. **Scope global renames.** Kickoff: a global "Sonic Heroes" to "Crazy Taxi 3" replace in CLAUDE.md also
