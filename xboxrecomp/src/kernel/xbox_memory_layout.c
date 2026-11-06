@@ -2076,6 +2076,8 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
         unsigned n = every ? (unsigned)atoi(every) : 0, t = s_watchdog_secs;
         if (n) {
             const uint8_t *mem = (const uint8_t *)g_memory_offset;
+            extern DWORD xbox_gil_report(void);
+            int dumped = 0;
             for (;;) {
                 uint32_t esp, i, shown = 0;
                 char line[512];
@@ -2095,6 +2097,16 @@ static DWORD WINAPI xbox_watchdog_thread(LPVOID unused)
                     }
                 }
                 fprintf(stderr, "%s\n", line);
+                xbox_gil_report();       /* who holds the guest lock */
+                /* Once: ask main.c's watcher for every thread's host stack
+                 * (the file named by RECOMP_THREAD_DUMP), as
+                 * tools/win/dump_threads.ps1 does by hand. */
+                if (!dumped++) {
+                    const char *flag = getenv("RECOMP_THREAD_DUMP");
+                    FILE *f = (flag && *flag) ? fopen(flag, "w") : NULL;
+                    if (f)
+                        fclose(f);
+                }
                 fflush(stderr);
             }
         }

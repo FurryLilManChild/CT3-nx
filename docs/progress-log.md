@@ -1,5 +1,16 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 5
+
+- The cooperative path runs: "tid 226988 suspends tid 214952 (cooperative)" three times; one self-suspension by
+  tid 200132 took the real path (Windows self-suspension inside the kernel, holding nothing).
+- Still the same stop: main thread at esp 0x0097FE88 (inside 0x000DE12F, NtSuspendThread, from the sound unlock
+  0x000B3330), icalls frozen at 35,660 from 25 s to 55 s. With the suspension now returning at once, the main
+  thread is most likely waiting for the guest lock or for something another thread holds; one thread's view
+  cannot say which.
+- The watchdog's periodic line now also prints the guest lock's holder ([GIL]) and, once, triggers main.c's
+  all-threads dump (RECOMP_THREAD_DUMP: each thread's host stack, resolved with out/pc/ct3_recomp.map).
+
 ## 2026-11-05: PC boot test 4 (periodic watchdog)
 
 - All three test switches arrived. The main thread sat at esp 0x0097FE88 from 25 s to 55 s with the icall count
