@@ -1,5 +1,21 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 6 (all-threads dump): the idle thread
+
+- The dump answered it. [GIL] holder tid 224644 for the whole run (tickets next 37003, serving 36999: four
+  waiting). Host stacks resolved with out/pc/ct3_recomp.map:
+  - main (230348): gil_lock < kernel_thunk_dispatch < sub_000DE12F (NtSuspendThread wrapper) < sub_000B3330 (the
+    sound unlock) < sub_000B9490 < sub_000BF5A0 < sub_0003B5F0 < sub_0005E420. The suspension returned; it waits
+    for the lock.
+  - 224644: sub_000B33D0+0xEE with nothing deeper: the holder, running guest code.
+  - the timer thread (kernel_raise_interrupt), sub_000A1400's thread and sub_000B3480's thread (in its own
+    NtSuspendThread, real path) also in gil_lock; sub_000B3410's thread in KeWaitForSingleObject.
+- 0x000B33D0 is an idle thread: `while (![0x002E00DC]) [0x002E00C4]++;` then exit. No call in the loop, so it never
+  passes a pre-emption check, a spin yield or the cooperative stop point: with the lock it runs forever. The
+  translator's poll-loop marking skips it (it counts, it does not just poll). On the Xbox the scheduler pre-empts it.
+- Fix: a hand-written sub_000B33D0 (src/recomp_manual.c), the same loop with RECOMP_PREEMPT on each pass. Linux and
+  Windows syntax checks clean.
+
 ## 2026-11-05: PC boot test 5
 
 - The cooperative path runs: "tid 226988 suspends tid 214952 (cooperative)" three times; one self-suspension by

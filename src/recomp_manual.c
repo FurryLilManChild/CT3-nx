@@ -68,6 +68,35 @@ typedef void (*recomp_func_t)(void);
  * anywhere; its only 10 ms stall (push 0x2710 at 0x0010E202, in
  * sub_0010E1F0) is reached once, from DirectSound init (caller 0x0010E69B). */
 
+/* ── The idle thread (0x000B33D0) ───────────────────────────
+ *
+ * Thread #4 of boot (PsCreateSystemThreadEx ctx 0x000B33D0): while the quit
+ * flag 0x002E00DC is 0, add 1 to the counter 0x002E00C4 (by the look of it a
+ * CPU idle measure next to CRI's sound threads 0x000B3410 and 0x000B3480);
+ * then set 0x002E00E0 and exit (0x000DE1E4, push 0xF0000001). The loop makes
+ * no call, so it never hands the guest lock over: on the Xbox the scheduler
+ * pre-empts it, here nothing did. PC boot test 6 (2026-11-05): this thread
+ * (tid 224644) held the guest lock for the whole run, its host stack at
+ * sub_000B33D0+0xEE with nothing deeper, while the main thread, the timer
+ * thread's interrupt and two other guest threads waited in gil_lock. Same
+ * loop, with the runtime's pre-emption check on each pass: one load when
+ * nobody waits, a hand-over (and the point where a pending NtSuspendThread
+ * from the sound lock 0x000B3330 stops it) when someone does. */
+extern void sub_000DE1E4(void);
+
+void sub_000B33D0(void)
+{
+    eax = MEM32(0x002E00DCu);
+    while (eax == 0) {
+        MEM32(0x002E00C4u) = MEM32(0x002E00C4u) + 1;
+        RECOMP_PREEMPT();
+        eax = MEM32(0x002E00DCu);
+    }
+    PUSH32(esp, 0xF0000001u);
+    MEM32(0x002E00E0u) = 1;
+    PUSH32(esp, 0x000B3408u); RECOMP_ABI_CALL(0x000DE1E4u, sub_000DE1E4);
+}
+
 /* ── D3D fence wait, BlockOnTime (0x000F86C0) ─────────────────
  *
  * Stdcall (fence at [esp+4], flags at [esp+8], ret 8). The device is the
