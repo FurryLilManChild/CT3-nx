@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-06: first Switch build
+
+- Toolchain on this cloud machine: Mark's C:\devkitPro (zipped into out\, 1.4 GB, staged in four parts) under
+  Wine (setup_switch_wine.sh; the zip lost the .exe execute bits, chmod +x); NVK's libvulkan.a and headers plus
+  libexpat.a and libzstd.a from ghcr.io/danfromtico/switch-dev-legacy-vulkan (static libraries only, nothing from
+  it run here; Mark agreed); glslang 15.4.0 built with the toolchain into /opt/glslang-switch (5 min).
+- Build: 92 steps, about 70 minutes on 2 cores (the machine restarted once and the build started over). One
+  Switch-only error: the lock handover's `volatile long` with InterlockedIncrement (LONG is 32-bit there).
+  switch/build.sh takes NINJA_ARGS (-k 0 to see every error in one pass).
+- Branding: the icon and loading logo still said SONIC HEROES (from the kickoff copy); now CRAZY TAXI 3.
+- Delivered to C:\CT3-nx\out\sd\switch\ct3\: ct3.nro (39 MB), ct3_env.txt (NFSU2_CPU_MHZ=1224, the smallest
+  overclock step first, as on CTDC-nx) and game\ (the extracted disc).
+
 ## 2026-11-06: PC play test 19: pause fixed
 
 - Mark: the pause picture holds still (and on his original Xbox it does too, so the jitter was ours). He also saw
