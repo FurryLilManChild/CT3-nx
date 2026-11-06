@@ -36,6 +36,10 @@
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x00066416 (push 0x64500); not inside any known function; starts 'sub esp, 0x14; mov ecx, dword ptr [0x2bb5ec]'"
  },
  {
+  "start": "0x00071540",
+  "note": "PC boot test 9 (2026-11-05): [STUB] unresolved 0x00071540 entered from 0x0005EE2C, right after Start on the title screen (Mark saw a white screen there). tools/retpad_sweep.py: 16-byte aligned after a ret and NOP padding (the ret checked as an instruction boundary from the container's start), a clean prologue, inside a tail_jump_alias function the static pass measured too long"
+ },
+ {
   "start": "0x00078220",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x00078740 (push 0x78220); not inside any known function; starts 'sub esp, 0x28; fld dword ptr [0x2cd19c]'"
  },
@@ -160,6 +164,14 @@
   "note": "seed_sweep.py [ret] 2026-11-05, reviewed by hand: .text: follows a ret with no padding, 16-byte aligned; not inside any known function; starts 'push ebx; push 0x1b7c78'"
  },
  {
+  "start": "0x000C1030",
+  "note": "tools/retpad_sweep.py: 16-byte aligned after a ret and NOP padding (the ret checked as an instruction boundary from the container's start), a clean prologue, inside a tail_jump_alias function the static pass measured too long"
+ },
+ {
+  "start": "0x000C1080",
+  "note": "tools/retpad_sweep.py: 16-byte aligned after a ret and NOP padding (the ret checked as an instruction boundary from the container's start), a clean prologue, inside a tail_jump_alias function the static pass measured too long"
+ },
+ {
   "start": "0x000C1300",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x000C221E (mov dword ptr [esi + 0x5f74], 0xc1300); inside sub_000C12E0; starts 'mov edx, dword ptr [esp + 4]; mov eax, dword ptr [edx + 0x4530]'"
  },
@@ -174,6 +186,10 @@
  {
   "start": "0x000C1490",
   "note": "seed_sweep.py [imm] 2026-11-05, reviewed by hand: immediate at 0x000C16D2 (mov dword ptr [eax + 0x3c], 0xc1490); not inside any known function; starts 'sub esp, 0x10; push ebx'"
+ },
+ {
+  "start": "0x000C1BE0",
+  "note": "tools/retpad_sweep.py: 16-byte aligned after a ret and NOP padding (the ret checked as an instruction boundary from the container's start), a clean prologue, inside a tail_jump_alias function the static pass measured too long"
  },
  {
   "start": "0x000C2000",

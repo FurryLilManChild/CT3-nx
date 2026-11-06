@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC boot test 9: title screen, white screen after Start
+
+- The ended-thread fix works: "thread tid 228536 has ended (exit 0x00000000): signalled KTHREAD" and the game
+  went on past the fade: Mark reached the title screen and pressed Start on the Legion Go's pad. The next
+  screen was white, with audio playing; buttons seemed to do nothing. Back to 47 to 55 fps there.
+- Files after Start: Media/Sprites_us/mSprites.art and tSprites.art. Then `[STUB] unresolved 0x00071540 entered
+  from 0x0005EE2C`: a real function after `ret; nop` inside sub_00071520, a tail_jump_alias measured too long,
+  which I had left out at kickoff (see pitfalls 13).
+- New tools/retpad_sweep.py (aligned starts after a ret and padding inside a known function): 4 candidates, all
+  clean, all seeded: 0x00071540, 0x000C1030, 0x000C1080, 0x000C1BE0. Regen: 5,557 functions, 188 unresolved.
+- From now on play tests use tools\win\play.ps1 (no time limit; boot_test closes the game at 60 s).
+
 ## 2026-11-05: PC boot test 8: logos, then the loader starves
 
 - Mark saw the logos: Sega, a couple of others, Hitmaker. Then a black screen to the end of the run. New files

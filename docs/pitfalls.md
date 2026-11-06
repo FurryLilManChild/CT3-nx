@@ -44,6 +44,12 @@ the rule.
 8. **Stubs must not be silent.** Kickoff: xboxrecomp's unresolved-call stubs returned without a trace, so skipped
    game code was invisible. Rule: make every stub log once (done in this repo's translator) before the first run.
 
+13. **"Inside another function" is not a reason to drop a candidate start; check what precedes it.** Kickoff: I
+    left out 0x00071540 and 0x000C1BE0 because the translator put them inside other functions. Both follow a ret
+    and NOP padding, so the containers were simply measured too long. 0x00071540 then ran as a stub right after
+    Start (test 9, a white screen). Rule: a start after `ret; padding` is a function whatever the container says
+    (tools/retpad_sweep.py), while a start reached by a jump from just above it (0x00049100) is not.
+
 ## Runtime
 
 9. **Assume a title may suspend another thread, not only itself.** Test 2: the Windows path froze a thread with a
