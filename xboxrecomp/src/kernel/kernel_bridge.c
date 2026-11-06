@@ -4427,7 +4427,20 @@ static void bridge_NtReadFile(void)
     /* What a read actually delivered. A decoder that rejects its input cannot
      * say whether the bytes were wrong or the read was, and the two look
      * identical from inside the title -- the first bytes settle it. */
-    if (!xbox_log_quiet()) {
+    /* CT3-nx: the first 200 reads, then only failures (end of file aside);
+     * RECOMP_READ_LOG=1 logs every one. One line per read on an unbuffered
+     * log made Crazy Taxi 3's loader wait in fprintf (PC play test 10: 144,143
+     * reads logged, the loader thread's stack in fprintf under
+     * bridge_NtReadFile during a very slow "now loading"). */
+    static int read_log_all = -1;
+    static unsigned read_logged;
+    if (read_log_all < 0) {
+        const char *e = getenv("RECOMP_READ_LOG");
+        read_log_all = e && *e == '1';
+    }
+    if (!xbox_log_quiet() &&
+        (read_log_all || read_logged++ < 200 ||
+         ((uint32_t)ios.Status != 0 && (uint32_t)ios.Status != 0xC0000011u))) {
         const uint8_t *p = (const uint8_t *)XBOX_TO_NATIVE(buffer_va);
         uint32_t got = (uint32_t)ios.Information;
         /* The offset matters as much as the length. A title streaming a pack

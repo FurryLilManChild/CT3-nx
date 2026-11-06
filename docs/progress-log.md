@@ -1,5 +1,28 @@
 # Progress log (newest first)
 
+## 2026-11-05: PC play test 10: menus, character select, the city, a crash
+
+- First play.ps1 run. Mark: main menu, West Coast, Arcade, character select (graphical glitches, slow), a character
+  picked, then a very slow NOW LOADING; the car and the world began to draw, then the game crashed. 45 to 50 fps
+  through most of the run; a 1.3 s hitch with shader compiles and 102 texture uploads as the city loaded.
+- The ended-thread and retpad fixes held (no hang; one stub left besides the lone ret: 0x000800AF "from 0x002B4CC0",
+  a return address inside .data, so a call through a garbage pointer).
+- Crash: `[CRASH] access violation ... read guest VA 0xB254FB34`, host sub_0007F9D0+0x2CD (map), registers full of
+  float-looking values (eax 3D72688C, ebx 3B84056E): data read as pointers.
+- Cause: six positioned reads failed with STATUS_UNSUCCESSFUL and 0 bytes just before it (offsets 0, 16896,
+  4729344, 5257216, 5284864, 5308416; lengths 5632 to 58880; around Partition5 _taxi2gen.bin and the 48 MB
+  _taxi1.bin cache). kernel_file.c passed FILE_NO_INTERMEDIATE_BUFFERING on as FILE_FLAG_NO_BUFFERING; Windows then
+  wants offsets and lengths in the host drive's sectors (4096 on Mark's SSD), the game aligns to the Xbox's 512.
+  Every failed offset is a multiple of 512 and not of 4096. The world was built from empty buffers.
+- Fix: the flag is no longer passed on (it is a hint on the Xbox); a failed read now logs a warning with the Win32
+  error instead of a compiled-out trace.
+- Slow loading: the dump taken during NOW LOADING has the loader thread (sub_000A05E0's) in fprintf under
+  bridge_NtReadFile: every read was logged on an unbuffered log, 144,143 lines this run. Now the first 200 reads
+  and every failure (end of file aside); RECOMP_READ_LOG=1 for all. The other fprintf waiter was nv2a_ack_thread's
+  DMA_PUT line (about 50 a second), left as is for now.
+- Not looked at yet: the character-select glitches and slowness (shader compiles and texture uploads show in the
+  [hitch] lines).
+
 ## 2026-11-05: PC boot test 9: title screen, white screen after Start
 
 - The ended-thread fix works: "thread tid 228536 has ended (exit 0x00000000): signalled KTHREAD" and the game

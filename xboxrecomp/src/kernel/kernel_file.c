@@ -186,8 +186,13 @@ NTSTATUS __stdcall xbox_NtCreateFile(
             xbox_share_to_win32(ShareAccess), NULL, OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS, NULL);
     } else {
-        if (CreateOptions & XBOX_FILE_NO_INTERMEDIATE_BUFFERING)
-            flags_and_attrs |= FILE_FLAG_NO_BUFFERING;
+        /* CT3-nx: FILE_NO_INTERMEDIATE_BUFFERING is not passed on. On the
+         * Xbox it is a hint and titles align to its 512-byte sectors; Windows'
+         * FILE_FLAG_NO_BUFFERING is a contract to the host drive's sector size
+         * (4096 on Mark's SSD), so Crazy Taxi 3's streaming reads at offsets
+         * like 16896 and 5308416 failed (ERROR_INVALID_PARAMETER class: 0
+         * bytes, STATUS_UNSUCCESSFUL), the city was built from empty buffers
+         * and the game crashed as the world drew (PC play test 10). */
         if (FileAttributes & XBOX_FILE_ATTRIBUTE_READONLY)
             flags_and_attrs |= FILE_ATTRIBUTE_READONLY;
         h = CreateFileW(win_path, xbox_access_to_win32(DesiredAccess),
@@ -263,8 +268,12 @@ NTSTATUS __stdcall xbox_NtReadFile(
         return STATUS_SUCCESS;
     }
 
-    XBOX_TRACE(XBOX_LOG_FILE, "NtReadFile(handle=%p, len=%u) failed err=%u",
-               FileHandle, Length, GetLastError());
+    /* CT3-nx: a warning, not a trace: a failed read hands the title an empty
+     * buffer, and the error is what says why. */
+    xbox_log(XBOX_LOG_WARN, XBOX_LOG_FILE,
+             "NtReadFile FAILED: handle=%p offset=%lld len=%u err=%u",
+             FileHandle, ByteOffset ? (long long)ByteOffset->QuadPart : -1LL,
+             Length, GetLastError());
     IoStatusBlock->Status = STATUS_UNSUCCESSFUL;
     IoStatusBlock->Information = 0;
     return STATUS_UNSUCCESSFUL;
