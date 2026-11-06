@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 5: in game with the city; the looping-audio freeze found
+
+- Mark: one boot froze with looping audio before NOW LOADING; the next got into a shift with the city drawn.
+- Cache rename: "done on the second try (first errno 5)": the park-and-retry fix works. In a shift at 1785 MHz:
+  30 to 34 fps (menus 56 to 60).
+- The freeze run's report: the sound lock (count 1) was taken on the path 0x000B3820 (the CRI thread's vblank
+  loop) -> 0x000B38F0 -> 0x000B9B60 -> 0x000B2A30 -> 0x000B5B70, and that thread was back in its vblank wait
+  (ordinal 159 from 0x000F5273), long past it. 0x000B5B70 / 0x000B5B90 are an outer counter at 0x002E0254
+  ("if 0, take the sound lock; ++" and "--; at 0, release"), 17 callers (ADX calls from the main thread and that
+  loop). The lock call between the test and the increment can hand over the guest lock, so two threads can both
+  see 0 and both take the lock; two releases then bring the counter to 0 once and the lock count stays 1. On the
+  Xbox the first thread is already at priority 15. Fix: overrides give the counter an owner (others wait).
+  LIFT_ONLY regen: recomp_0011.c and one more changed (the _gen wrappers); the PC build needs -Regen.
+
 ## 2026-11-06: Switch test 4 (1785 MHz): crash after character select
 
 - Mark: "an error happened" after character select. The log: the PC play test 12 crash again. [ICALL] 0x000B8120

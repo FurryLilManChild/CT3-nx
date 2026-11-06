@@ -252,6 +252,50 @@ void sub_000B3330(void)                 /* unlock */
     }
 }
 
+/* ── ADX's outer lock counter, 0x000B5B70 / 0x000B5B90 ─────────
+ *
+ * Switch test 5 (the looping-audio freeze): the stuck-lock report showed the
+ * sound lock (count 1) taken on the path 0x000B3820 (the CRI thread's
+ * vblank loop) -> 0x000B9B60 -> 0x000B2A30 -> 0x000B5B70, with that thread
+ * long past it, back in its vblank wait. 0x000B5B70 is "if [0x002E0254] is
+ * 0, take the sound lock; then [0x002E0254]++", and 0x000B5B90 is "--; at 0,
+ * release it". 17 callers (the ADX calls the main thread makes, and that
+ * loop). Between the test and the increment the lock call runs, and here it
+ * can hand the guest lock over (its own kernel calls, or the wait above), so
+ * a second thread finds the counter still 0 and takes the lock a second
+ * time; the two releases then drop the counter to 0 once and the lock count
+ * stays at 1 for good. On the Xbox the first thread is at priority 15 by
+ * then and nobody else runs. So the counter is given an owner: another thread
+ * waits while it is held. */
+extern void sub_000B5B70_gen(void);
+extern void sub_000B5B90_gen(void);
+static uintptr_t s_adx_outer_owner;
+
+void sub_000B5B70(void)
+{
+    uintptr_t me = CRI_ME;
+    if (s_adx_outer_owner != me) {
+        uint64_t t0 = cri_now_ms();
+        int noted = 0;
+        while (s_adx_outer_owner && s_adx_outer_owner != me) {
+            if (!noted && cri_now_ms() > t0 + 2000) {
+                fprintf(stderr, "[CRI] ADX outer lock: waiting over 2 s (counter %u)\n", MEM32(0x002E0254u));
+                noted = 1;
+            }
+            recomp_spin_yield();
+        }
+        s_adx_outer_owner = me;
+    }
+    sub_000B5B70_gen();
+}
+
+void sub_000B5B90(void)
+{
+    sub_000B5B90_gen();
+    if (MEM32(0x002E0254u) == 0)
+        s_adx_outer_owner = 0;
+}
+
 void sub_000B97E0(void)                 /* one server pass over a job group */
 {
     uintptr_t me = CRI_ME;
