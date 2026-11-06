@@ -89,7 +89,7 @@ cmake -S "$REPO" -B "$BUILD" -G Ninja \
     -DXBOXRECOMP_DIR="$TK" -DNFSU2_GEN_DIR="$GEN" \
     -DNFSU2_SWITCH_ICON="$REPO/switch/icon.jpg" "${VK_ARGS[@]}" "${FF_ARGS[@]}" \
     "${LTO_ARGS[@]}" -DNFSU2_GEN_PLAIN_MEM="$( [ "${GEN_PLAIN_MEM:-0}" = "1" ] && echo ON || echo OFF )" >/dev/null
-ninja -C "$BUILD" -j"$JOBS"
+ninja -C "$BUILD" -j"$JOBS" ${NINJA_ARGS:-}
 
 DEST="$SD/switch/ct3"
 mkdir -p "$DEST"

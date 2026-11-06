@@ -101,6 +101,11 @@ the rule.
     Caught before shipping. Rule: grep the copied repo for the old game's name in tools and assets too, and
     regenerate their outputs.
 
+22. **A syntax check with -w hides the errors the Switch compiler makes.** The lock handover's `volatile long`
+    counter passed my Windows and Linux checks (both with -w) and failed the Switch build at step 35: on the
+    Switch LONG is 32-bit, and GCC 16 makes an incompatible pointer an error. Rule: check changed runtime files
+    with -Werror=incompatible-pointer-types at least, and use LONG with Interlocked*.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

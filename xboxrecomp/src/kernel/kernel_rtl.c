@@ -203,7 +203,7 @@ typedef struct {
     volatile uint32_t      owner_site;
     volatile unsigned long owner_tid;
     volatile long          depth;
-    volatile long          waiters;     /* threads in the slow path of Enter */
+    volatile LONG          waiters;     /* threads in the slow path of Enter (LONG for Interlocked*) */
 } XBOX_CS_SLOT;
 
 static XBOX_CS_SLOT g_cs_table[XBOX_CS_TABLE_SIZE];
@@ -548,7 +548,7 @@ VOID __stdcall xbox_RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
             /* The performance counter, not GetTickCount64: that ticks every
              * 15.6 ms on Windows, so "2 ms" was anything from 0 to 16. */
             LARGE_INTEGER f, t, until;
-            static long noted;
+            static LONG noted;
             QueryPerformanceFrequency(&f);
             QueryPerformanceCounter(&until);
             until.QuadPart += f.QuadPart / 500;
