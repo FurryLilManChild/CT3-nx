@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-06: the guest lock by guest priority (RECOMP_GIL_PRIO), for Switch test 7
+
+- Mark's question: if the Xbox keeps the sound code safe by thread priority, why not do the same. So the guest
+  lock (kernel_bridge.c) now hands over by guest priority under RECOMP_GIL_PRIO=1 (main.c sets it): the next
+  holder is the highest-priority waiter (oldest first among equals); a waiter above the holder asks it to yield at
+  once (function entries); threads at DISPATCH rank first; equal priorities share after 1 ms; a waiter left out
+  50 ms is let in first and logged ("[GIL] priority: ... waited"), so a difference from the console cannot hang
+  the game for good.
+- With it: RECOMP_CRI_ATOMIC (the no-pre-emption pass) is off by default (it would also keep out the threads above
+  the server); the hand-written CRI waits sleep 1 ms with the lock given up (xbox_wait_yield_ms) instead of a
+  yield that would hand it straight back to a higher-priority waiter.
+- The test: "[CRI] SJ ring error -3" (if the crash comes back) says whether other guest threads ran during the
+  failing pass. "[GIL] priority" lines say whether the 50 ms safety net had to step in, and for which thread.
+
 ## 2026-11-06: Switch test 6: the SJ ring crash, twice, with no give-ups
 
 - Mark: both tries crashed a second into NOW LOADING. Both logs: [ICALL] 0x000B8120 from 0x000B84CC with -3 on the

@@ -146,6 +146,7 @@ static uintptr_t s_cri_pass_key[2];        /* the threads inside a pass now */
 static uint32_t  s_cri_lock_stack[48];     /* its guest stack when it took the lock */
 extern uintptr_t xbox_thread_key(void);
 extern void xbox_gil_nopreempt(int delta);
+extern void xbox_wait_yield_ms(unsigned ms);
 extern unsigned xbox_gil_switched_in(void);
 extern unsigned long xbox_gil_prev_other(void);
 static uint64_t cri_now_ms(void);
@@ -248,7 +249,7 @@ void sub_000B32F0(void)                 /* lock */
                 }
                 break;
             }
-            recomp_spin_yield();
+            xbox_wait_yield_ms(1);
         }
         s_cri_st.lock_wait_ms += cri_now_ms() - t0;
     }
@@ -307,7 +308,7 @@ void sub_000B5B70(void)
                 fprintf(stderr, "[CRI] ADX outer lock: waiting over 2 s (counter %u)\n", MEM32(0x002E0254u));
                 noted = 1;
             }
-            recomp_spin_yield();
+            xbox_wait_yield_ms(1);
         }
         s_adx_outer_owner = me;
     }
@@ -342,7 +343,7 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
                     cri_holder_report();
                     noted = 1;
                 }
-                recomp_spin_yield();
+                xbox_wait_yield_ms(1);
             }
             s_cri_st.pass_wait_ms += cri_now_ms() - t0;
         }
@@ -361,10 +362,14 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
      * the middle of one. Here the guest lock could still be handed to another
      * thread at any function entry in the pass (RECOMP_PREEMPT), so a lower
      * thread could work on the same ring half-way through. A pass now gives
-     * the lock up only in kernel calls. RECOMP_CRI_ATOMIC=0: as before. */
+     * the lock up only in kernel calls (RECOMP_CRI_ATOMIC=1; see below). */
     {
         static int atomic = -1;
-        if (atomic < 0) { const char *e = getenv("RECOMP_CRI_ATOMIC"); atomic = !(e && *e == '0'); }
+        /* Off by default since RECOMP_GIL_PRIO (main.c): with the lock handed over
+         * by priority nothing below the server gets in mid-pass anyway, and
+         * this would also keep out the threads above it (ISRs, DPCs, the
+         * holder of the sound lock). RECOMP_CRI_ATOMIC=1 turns it on. */
+        if (atomic < 0) { const char *e = getenv("RECOMP_CRI_ATOMIC"); atomic = e && *e == '1'; }
         if (atomic) xbox_gil_nopreempt(1);
         if (t_cri_pass_depth == 1) {
             t_cri_pass_switch0 = xbox_gil_switched_in();

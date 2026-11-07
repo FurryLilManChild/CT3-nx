@@ -419,6 +419,14 @@ static int game_main(void)
 #else
     setenv("RECOMP_INLINE_FFP", "1", 0);
 #endif
+    /* CT3-nx: the guest lock by guest priority (kernel_bridge.c): CRI's sound
+     * code relies on the sound servers' priority to keep other threads out
+     * mid-update (Switch tests 4 and 6). RECOMP_GIL_PRIO=0 for the old turns. */
+#ifdef _WIN32
+    if (!getenv("RECOMP_GIL_PRIO")) _putenv("RECOMP_GIL_PRIO=1");
+#else
+    setenv("RECOMP_GIL_PRIO", "1", 0);
+#endif
 #if defined(__SWITCH__)
     /* Every periodic log line flushes to the SD card; keep the log to what
      * matters on a console. RECOMP_QUIET=0 in ct3_env.txt brings it back. */

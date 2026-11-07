@@ -724,10 +724,161 @@ static RECOMP_TLS DWORD t_gil_prev_other;
 unsigned xbox_gil_switched_in(void) { return t_gil_switched_in; }
 unsigned long xbox_gil_prev_other(void) { return (unsigned long)t_gil_prev_other; }
 
+/* CT3-nx: RECOMP_GIL_PRIO=1 hands the guest lock over by guest priority,
+ * as the Xbox's scheduler runs threads: the next holder is the highest-
+ * priority thread waiting (oldest first among equals), and a waiting thread
+ * above the holder asks it to yield at once (lifted code checks at every
+ * function entry). Lower threads get the lock only when nothing above them is
+ * waiting -- while those are blocked in the kernel, as on the console.
+ * Crazy Taxi 3's CRI sound code relies on this (its stream rings have no lock:
+ * the sound server's priority keeps everything else out mid-update; Switch
+ * tests 4 and 6, PC play test 12). Threads at DISPATCH (ISRs, DPCs) rank above
+ * everything. A waiter left out for 50 ms is let in first all the same and
+ * logged ("[GIL] priority: ... waited"), so a difference from the console
+ * cannot hang the game for good. Equal priorities still share: a waiter of
+ * the holder's own priority asks for a turn after 1 ms, as before. */
+#define GIL_PW_MAX 64
+static struct { uint64_t ticket; int prio; volatile int granted; uint64_t since_ms; DWORD tid; } s_gil_pw[GIL_PW_MAX];
+static int s_gil_pw_n;                      /* entries in use, under s_gil_cs */
+static volatile int s_gil_busy;             /* someone holds it (priority mode) */
+static int s_gil_prio_holder = -100;
+
+static int gil_prio_mode(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("RECOMP_GIL_PRIO");
+        on = e && *e == '1';
+        if (on)
+            fprintf(stderr, "  [THREAD] guest lock handed over by guest priority (RECOMP_GIL_PRIO)\n");
+    }
+    return on;
+}
+
+static int gil_my_prio(void)
+{
+    if (xbox_thread_holds_dispatch())
+        return 100;
+    return GetThreadPriority(GetCurrentThread());
+}
+
+/* Pick and grant the next holder. Under s_gil_cs, with the lock free. */
+static void gil_prio_grant_next(void)
+{
+    int k, best = -1;
+    uint64_t now = GetTickCount64();
+    for (k = 0; k < s_gil_pw_n; k++) {
+        int pk, pb;
+        if (s_gil_pw[k].granted)
+            continue;
+        pk = now - s_gil_pw[k].since_ms >= 50 ? 1000 : s_gil_pw[k].prio;
+        if (best < 0) { best = k; continue; }
+        pb = now - s_gil_pw[best].since_ms >= 50 ? 1000 : s_gil_pw[best].prio;
+        if (pk > pb || (pk == pb && s_gil_pw[k].ticket < s_gil_pw[best].ticket))
+            best = k;
+    }
+    if (best >= 0) {
+        if (now - s_gil_pw[best].since_ms >= 50) {
+            static LONG noted;
+            if (InterlockedIncrement(&noted) <= 20)
+                fprintf(stderr, "  [GIL] priority: host thread %lu (priority %d) waited %llu ms, let in first\n",
+                        (unsigned long)s_gil_pw[best].tid, s_gil_pw[best].prio,
+                        (unsigned long long)(now - s_gil_pw[best].since_ms));
+        }
+        s_gil_pw[best].granted = 1;
+        s_gil_busy = 1;
+        s_gil_prio_holder = s_gil_pw[best].prio;
+        WakeAllConditionVariable(&s_gil_cv);
+    }
+}
+
+/* Does anyone above priority p wait? Under s_gil_cs. */
+static int gil_prio_higher_waiting(int p)
+{
+    int k;
+    for (k = 0; k < s_gil_pw_n; k++)
+        if (!s_gil_pw[k].granted && s_gil_pw[k].prio > p)
+            return 1;
+    return 0;
+}
+
+static void gil_lock_prio(void)
+{
+    int prio = gil_my_prio(), slot = -1, k;
+    EnterCriticalSection(&s_gil_cs);
+    if (!s_gil_busy && s_gil_pw_n == 0) {
+        s_gil_busy = 1;
+    } else {
+        for (k = 0; k < s_gil_pw_n; k++)      /* reuse a finished slot */
+            if (s_gil_pw[k].granted == 2) { slot = k; break; }
+        if (slot < 0 && s_gil_pw_n < GIL_PW_MAX)
+            slot = s_gil_pw_n++;
+        if (slot >= 0) {
+            s_gil_pw[slot].ticket = s_gil_next++;
+            s_gil_pw[slot].prio = prio;
+            s_gil_pw[slot].granted = 0;
+            s_gil_pw[slot].since_ms = GetTickCount64();
+            s_gil_pw[slot].tid = GetCurrentThreadId();
+        }
+        if (prio > s_gil_prio_holder)
+            g_gil_contended = 1;
+        if (!s_gil_busy)
+            gil_prio_grant_next();
+        if (slot < 0) {                     /* table full: plain wait */
+            while (s_gil_busy)
+                SleepConditionVariableCS(&s_gil_cv, &s_gil_cs, 1);
+            s_gil_busy = 1;
+        } else {
+            while (!s_gil_pw[slot].granted) {
+                if (!SleepConditionVariableCS(&s_gil_cv, &s_gil_cs, 1)
+                    && (prio >= s_gil_prio_holder
+                        || GetTickCount64() - s_gil_pw[slot].since_ms >= 50))
+                    g_gil_contended = 1;   /* equal or higher, or left out 50 ms: ask for a turn */
+                if (!s_gil_busy)
+                    gil_prio_grant_next();
+            }
+        }
+    }
+    s_gil_prio_holder = prio;
+    s_gil_serving++;
+    if (slot >= 0) {
+        /* Free our slot (waiters keep their own index while they sleep, so
+         * slots are marked free and reused, and trimmed from the top). */
+        s_gil_pw[slot].granted = 2;
+        while (s_gil_pw_n > 0 && s_gil_pw[s_gil_pw_n - 1].granted == 2)
+            s_gil_pw_n--;
+    }
+    g_gil_contended = gil_prio_higher_waiting(prio);
+    LeaveCriticalSection(&s_gil_cs);
+}
+
+static void gil_unlock_prio(void)
+{
+    EnterCriticalSection(&s_gil_cs);
+    s_gil_holder_tid = 0;
+    s_gil_busy = 0;
+    s_gil_prio_holder = -100;
+    gil_prio_grant_next();
+    LeaveCriticalSection(&s_gil_cs);
+}
+
 static void gil_lock(void)
 {
     uint64_t me;
-    int eager = gil_eager(), prio = eager ? gil_prio_now() : 0, counted = 0;
+    int eager;
+    if (gil_prio_mode()) {
+        gil_lock_prio();
+        s_gil_holder_tid = GetCurrentThreadId();
+        s_gil_holder_isr = 0;
+        if (s_gil_last_tid != s_gil_holder_tid) {
+            t_gil_switched_in++;
+            t_gil_prev_other = s_gil_last_tid;
+            s_gil_last_tid = s_gil_holder_tid;
+        }
+        return;
+    }
+    eager = gil_eager();
+    int prio = eager ? gil_prio_now() : 0, counted = 0;
     DWORD w_tid = 0;
     int w_prio = 0, w_isr = 0, w_main = 0;
     LARGE_INTEGER w_a;
@@ -799,6 +950,10 @@ static void gil_lock(void)
 
 static void gil_unlock(void)
 {
+    if (gil_prio_mode()) {
+        gil_unlock_prio();
+        return;
+    }
     EnterCriticalSection(&s_gil_cs);
     s_gil_holder_tid = 0;
     s_gil_serving++;
@@ -859,6 +1014,16 @@ void recomp_spin_yield(void)
 {
     int d = xbox_gil_suspend();
     SwitchToThread();
+    xbox_gil_resume(d);
+}
+
+/* CT3-nx: a hand-written wait (recomp_manual.c) that gives the guest lock
+ * up and sleeps, so a lower-priority thread it waits for can run under
+ * RECOMP_GIL_PRIO (a plain yield would hand the lock straight back). */
+void xbox_wait_yield_ms(unsigned ms)
+{
+    int d = xbox_gil_suspend();
+    Sleep(ms);
     xbox_gil_resume(d);
 }
 
