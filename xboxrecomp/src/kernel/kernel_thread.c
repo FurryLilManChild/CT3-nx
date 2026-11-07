@@ -423,6 +423,16 @@ void xbox_kernel_busy(int delta)
  * old path. */
 static volatile LONG g_coop_any;   /* cooperative suspensions outstanding, all threads */
 
+/* CT3-nx: is this thread's cooperative suspension outstanding? */
+int xbox_thread_suspend_pending(void)
+{
+    if (!g_coop_any)
+        return 0;
+    if (!t_kslot)
+        t_kslot = kbusy_slot(GetCurrentThreadId(), 0);
+    return t_kslot && t_kslot->coop > 0;
+}
+
 void xbox_thread_suspend_point(void)
 {
     KThreadSlot *k;

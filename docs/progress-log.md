@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 8d, a suspended thread no longer runs
+
+- Test 8c: priorities right at last (the main thread at 15 while it holds the CRI sound lock), and no sound pass
+  entered by a thread at or below it. But the logos crawled at 0 fps: every sound lock waited the full 1 s for
+  the -2 server's pass ("a server pass still running after 1 s"). With RECOMP_CRI_EXCL=0 in ct3_env.txt (no
+  build) 2 to 3 fps, stuck at the Hitmaker logo.
+- Cause found in the code: the unlock suspends the idle thread (0x000B33D0, +2, a busy loop) and drops the main
+  thread to 0; the idle thread, already waiting for the guest lock, took it (the suspension is only checked
+  before a thread queues) and spun until an interrupt asked for a turn. The watchdog showed it: the main thread at
+  0 waiting with 1010 (+2) holding. Now xbox_gil_resume checks again once it has the lock, and lets go and stops
+  if a suspension came meanwhile.
+- The CRI exclusion waits are off by default (RECOMP_CRI_EXCL=1 for them).
+
 ## 2026-11-06: Switch test 8c, three scheduling bugs from test 8b
 
 - Test 8b showed the Sega logo, then froze. Its log: the main thread still waited at priority 0 behind the sound

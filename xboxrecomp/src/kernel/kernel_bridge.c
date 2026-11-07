@@ -1268,6 +1268,7 @@ static int xbox_gil_suspend_kcall(uint32_t ord)
 }
 
 void xbox_thread_suspend_point(void);   /* kernel_thread.c */
+int xbox_thread_suspend_pending(void); /* kernel_thread.c */
 
 void xbox_gil_resume(int depth)
 {
@@ -1275,9 +1276,21 @@ void xbox_gil_resume(int depth)
         /* CT3-nx: a thread another one suspended stops here, holding no lock
          * and no ticket (unless it holds the dispatch lock: an ISR or DPC
          * runs to completion). */
-        if (!xbox_thread_holds_dispatch())
-            xbox_thread_suspend_point();
-        gil_lock();
+        /* CT3-nx: and again once it has the lock. A suspension that came
+         * while it waited for the lock would otherwise let it run: on the
+         * Xbox a suspended thread does not run at all. Switch test 8c: the
+         * CRI sound unlock suspends the idle thread (0x000B33D0, +2, a busy
+         * loop) and drops the main thread back to 0; the idle thread, already
+         * queued for the lock, took it and spun until the next interrupt asked
+         * for a turn, at every unlock (the logos at 0 to 3 fps). */
+        for (;;) {
+            if (!xbox_thread_holds_dispatch())
+                xbox_thread_suspend_point();
+            gil_lock();
+            if (xbox_thread_holds_dispatch() || !xbox_thread_suspend_pending())
+                break;
+            gil_unlock();
+        }
         t_gil_depth = depth;
     }
 }

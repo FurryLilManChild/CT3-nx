@@ -197,7 +197,11 @@ static uint64_t cri_now_ms(void) { return MEM32(g_xbox_kernel_data_base + 0x20u)
 static int cri_excl(void)
 {
     static int on = -1;
-    if (on < 0) { const char *e = getenv("RECOMP_CRI_EXCL"); on = !(e && *e == '0'); }
+    /* Off by default since Switch test 8c: with the guest lock following the
+     * Xbox's scheduling rules (RECOMP_GIL_PRIO) these waits are extra, and
+     * the -2 server rarely ran to the end of its pass, so every lock waited
+     * the full 1 s. RECOMP_CRI_EXCL=1 turns them on. */
+    if (on < 0) { const char *e = getenv("RECOMP_CRI_EXCL"); on = e && *e == '1'; }
     return on;
 }
 
