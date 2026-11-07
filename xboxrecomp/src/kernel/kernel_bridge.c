@@ -724,24 +724,95 @@ static RECOMP_TLS DWORD t_gil_prev_other;
 unsigned xbox_gil_switched_in(void) { return t_gil_switched_in; }
 unsigned long xbox_gil_prev_other(void) { return (unsigned long)t_gil_prev_other; }
 
-/* CT3-nx: RECOMP_GIL_PRIO=1 hands the guest lock over by guest priority,
- * as the Xbox's scheduler runs threads: the next holder is the highest-
- * priority thread waiting (oldest first among equals), and a waiting thread
- * above the holder asks it to yield at once (lifted code checks at every
- * function entry). Lower threads get the lock only when nothing above them is
- * waiting -- while those are blocked in the kernel, as on the console.
- * Crazy Taxi 3's CRI sound code relies on this (its stream rings have no lock:
- * the sound server's priority keeps everything else out mid-update; Switch
- * tests 4 and 6, PC play test 12). Threads at DISPATCH (ISRs, DPCs) rank above
- * everything. A waiter left out for 50 ms is let in first all the same and
- * logged ("[GIL] priority: ... waited"), so a difference from the console
- * cannot hang the game for good. Equal priorities still share: a waiter of
- * the holder's own priority asks for a turn after 1 ms, as before. */
+/* CT3-nx: RECOMP_GIL_PRIO=1 runs guest threads by the Xbox scheduler's rules
+ * (Switch test 8 on; tests 7 and before used a gentler version):
+ *   - the guest lock goes to the highest-priority thread waiting for it
+ *     (oldest first among equals); threads at DISPATCH (ISRs, DPCs, raised
+ *     sections) rank above everything;
+ *   - a waiting thread above the holder asks it to yield at once (lifted code
+ *     checks at every function entry); one of the holder's own priority asks
+ *     after 1 ms (equal priorities share, as before);
+ *   - a kernel call does not let a thread of the caller's priority or below
+ *     in: the lock is reserved for the caller until the call really blocks
+ *     (a wait that is not already satisfied, a sleep, file I/O, a contended
+ *     lock, a yield, thread exit). On the Xbox a call that does not block
+ *     never switches threads. Test 7 crashed with the sound server's pass
+ *     interrupted 8 times, its only releases being KfRaiseIrql, KfLowerIrql
+ *     and RtlLeaveCriticalSection (ICALL history at the crash);
+ *   - a poll-loop yield (RECOMP_SPIN_HINT) waits behind everyone: the loop
+ *     waits for something else to happen, so anyone may run first.
+ * Test 7's 50 ms rule (a waiter left out that long went first, and forced a
+ * yield) is gone: it is not on the Xbox, and could break into a sound pass.
+ * Watchdogs only log: a thread waiting 50 ms, a reservation over 2 ms (the
+ * kernel call is named). The one exception is a reservation held for 1 s,
+ * which can only be a deadlock between host locks and the reservation (the
+ * Xbox has no such state): it is dropped and logged loudly. */
 #define GIL_PW_MAX 64
-static struct { uint64_t ticket; int prio; volatile int granted; uint64_t since_ms; DWORD tid; } s_gil_pw[GIL_PW_MAX];
+static struct { uint64_t ticket; int prio, low; volatile int granted; uint64_t since_ms; DWORD tid; int noted; } s_gil_pw[GIL_PW_MAX];
 static int s_gil_pw_n;                      /* entries in use, under s_gil_cs */
 static volatile int s_gil_busy;             /* someone holds it (priority mode) */
 static int s_gil_prio_holder = -100;
+
+/* Kernel-call reservations, under s_gil_cs: one per thread in a call that
+ * has not blocked (a higher thread let in can make a call of its own). */
+#define GIL_RESV_MAX 8
+static struct { DWORD tid; int prio; uint32_t ord; uint64_t us; int noted; } s_gil_resv[GIL_RESV_MAX];
+static volatile int s_gil_resv_n;
+static RECOMP_TLS int t_gil_resv_held;      /* this thread has an entry */
+
+static int gil_resv_top(void)               /* the highest reserved priority, or none */
+{
+    int k, top = -100000;
+    for (k = 0; k < s_gil_resv_n; k++)
+        if (s_gil_resv[k].prio > top) top = s_gil_resv[k].prio;
+    return top;
+}
+
+static int gil_resv_take_mine(void)         /* remove this thread's entry; 1 if it had one */
+{
+    int k;
+    DWORD me = GetCurrentThreadId();
+    for (k = 0; k < s_gil_resv_n; k++)
+        if (s_gil_resv[k].tid == me) {
+            s_gil_resv[k] = s_gil_resv[--s_gil_resv_n];
+            t_gil_resv_held = 0;
+            return 1;
+        }
+    t_gil_resv_held = 0;
+    return 0;
+}
+static RECOMP_TLS int t_gil_want_resv;      /* set by xbox_gil_suspend_kcall for gil_unlock_prio */
+static RECOMP_TLS uint32_t t_gil_want_ord;
+static RECOMP_TLS int t_gil_low;            /* next lock: wait behind everyone (poll yield) */
+
+/* Why this thread last let the lock go (the sound-pass intrusion log). */
+enum { REL_NONE, REL_KCALL, REL_PREEMPT, REL_SPIN, REL_OTHER };
+enum { DROP_NONE, DROP_WAIT, DROP_SLEEP, DROP_FILE, DROP_CS, DROP_SUSPEND, DROP_BREAKER, DROP_START };
+static RECOMP_TLS int t_gil_rel_why, t_gil_rel_drop;
+static RECOMP_TLS uint32_t t_gil_rel_ord;
+static RECOMP_TLS uint64_t t_gil_rel_seq;
+static RECOMP_TLS int t_gil_watch;          /* inside a CRI sound pass (recomp_manual.c) */
+
+/* Holders in order, so a thread coming back can see who ran meanwhile. */
+static uint64_t s_gil_hseq;
+static struct { uint64_t seq; DWORD tid; int prio; } s_gil_hist[32];
+
+static volatile LONG s_gil_watch_n[8];      /* intrusions by route, since the last report */
+static volatile LONG s_gil_watch_xbox;      /* intrusions the Xbox would allow too (higher thread) */
+static volatile LONG s_gil_resv_slow, s_gil_wait50;
+
+static uint64_t gil_now_us(void)
+{
+    static double per_us;
+    LARGE_INTEGER c;
+    if (per_us == 0) {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        per_us = (double)f.QuadPart / 1000000.0;
+    }
+    QueryPerformanceCounter(&c);
+    return (uint64_t)(c.QuadPart / per_us);
+}
 
 static int gil_prio_mode(void)
 {
@@ -750,7 +821,7 @@ static int gil_prio_mode(void)
         const char *e = getenv("RECOMP_GIL_PRIO");
         on = e && *e == '1';
         if (on)
-            fprintf(stderr, "  [THREAD] guest lock handed over by guest priority (RECOMP_GIL_PRIO)\n");
+            fprintf(stderr, "  [THREAD] guest lock handed over by the Xbox scheduler's rules (RECOMP_GIL_PRIO)\n");
     }
     return on;
 }
@@ -762,29 +833,25 @@ static int gil_my_prio(void)
     return GetThreadPriority(GetCurrentThread());
 }
 
-/* Pick and grant the next holder. Under s_gil_cs, with the lock free. */
+static int gil_rank(int k) { return s_gil_pw[k].low ? -1000 : s_gil_pw[k].prio; }
+
+/* Pick and grant the next holder. Under s_gil_cs, with the lock free. While
+ * a kernel call holds the reservation only threads above it may go. */
 static void gil_prio_grant_next(void)
 {
     int k, best = -1;
-    uint64_t now = GetTickCount64();
     for (k = 0; k < s_gil_pw_n; k++) {
-        int pk, pb;
+        int rk;
         if (s_gil_pw[k].granted)
             continue;
-        pk = now - s_gil_pw[k].since_ms >= 50 ? 1000 : s_gil_pw[k].prio;
-        if (best < 0) { best = k; continue; }
-        pb = now - s_gil_pw[best].since_ms >= 50 ? 1000 : s_gil_pw[best].prio;
-        if (pk > pb || (pk == pb && s_gil_pw[k].ticket < s_gil_pw[best].ticket))
+        rk = gil_rank(k);
+        if (s_gil_resv_n && rk <= gil_resv_top())
+            continue;
+        if (best < 0 || rk > gil_rank(best)
+            || (rk == gil_rank(best) && s_gil_pw[k].ticket < s_gil_pw[best].ticket))
             best = k;
     }
     if (best >= 0) {
-        if (now - s_gil_pw[best].since_ms >= 50) {
-            static LONG noted;
-            if (InterlockedIncrement(&noted) <= 20)
-                fprintf(stderr, "  [GIL] priority: host thread %lu (priority %d) waited %llu ms, let in first\n",
-                        (unsigned long)s_gil_pw[best].tid, s_gil_pw[best].prio,
-                        (unsigned long long)(now - s_gil_pw[best].since_ms));
-        }
         s_gil_pw[best].granted = 1;
         s_gil_busy = 1;
         s_gil_prio_holder = s_gil_pw[best].prio;
@@ -797,16 +864,140 @@ static int gil_prio_higher_waiting(int p)
 {
     int k;
     for (k = 0; k < s_gil_pw_n; k++)
-        if (!s_gil_pw[k].granted && s_gil_pw[k].prio > p)
+        if (!s_gil_pw[k].granted && !s_gil_pw[k].low && s_gil_pw[k].prio > p)
             return 1;
     return 0;
 }
 
+/* Watchdogs, from a waiter's 1 ms wake-ups. Under s_gil_cs. */
+static void gil_prio_watchdogs(int slot)
+{
+    uint64_t now_ms = GetTickCount64();
+    if (slot >= 0 && !s_gil_pw[slot].noted && now_ms - s_gil_pw[slot].since_ms >= 50) {
+        static LONG lines;
+        s_gil_pw[slot].noted = 1;
+        InterlockedIncrement(&s_gil_wait50);
+        if (InterlockedIncrement(&lines) <= 30)
+            fprintf(stderr, "  [GIL] watchdog: host thread %lu (priority %d%s) has waited 50 ms; "
+                            "holder host thread %lu (priority %d)%s\n",
+                    (unsigned long)s_gil_pw[slot].tid, s_gil_pw[slot].prio,
+                    s_gil_pw[slot].low ? ", after a poll yield" : "",
+                    (unsigned long)s_gil_holder_tid, s_gil_busy ? s_gil_prio_holder : 0,
+                    !s_gil_busy && s_gil_resv_n ? " -- none: a kernel call holds the reservation" : "");
+    }
+    if (s_gil_resv_n && !s_gil_busy) {
+        int r;
+        uint64_t now = gil_now_us();
+        for (r = 0; r < s_gil_resv_n; r++) {
+            uint64_t age = now - s_gil_resv[r].us;
+            if (age >= 2000 && !s_gil_resv[r].noted) {
+                static LONG lines;
+                s_gil_resv[r].noted = 1;
+                InterlockedIncrement(&s_gil_resv_slow);
+                if (InterlockedIncrement(&lines) <= 30)
+                    fprintf(stderr, "  [GIL] watchdog: kernel ordinal %u by host thread %lu (priority %d) "
+                                    "has kept lower threads out for 2 ms\n",
+                            s_gil_resv[r].ord, (unsigned long)s_gil_resv[r].tid, s_gil_resv[r].prio);
+            }
+            if (age >= 1000000) {
+                static LONG lines;
+                if (InterlockedIncrement(&lines) <= 30)
+                    fprintf(stderr, "  [GIL] *** deadlock breaker: kernel ordinal %u by host thread %lu has held "
+                                    "the reservation for 1 s; dropped (not Xbox behaviour, please send this log)\n",
+                            s_gil_resv[r].ord, (unsigned long)s_gil_resv[r].tid);
+                s_gil_resv[r] = s_gil_resv[--s_gil_resv_n];   /* its owner finds no entry */
+                r--;
+                gil_prio_grant_next();
+            }
+        }
+    }
+}
+
+/* A sound pass came back to the lock after another thread had it. */
+static void gil_watch_note(uint64_t rel_seq, int my_prio)
+{
+    int k, lo = 1000, n = 0, route;
+    DWORD lo_tid = 0;
+    static const char *why[] = { "unknown", "a kernel call", "a yield at a function entry",
+                                 "a poll-loop yield", "a hand-written wait" };
+    static const char *drop[] = { "", ", which blocked in a wait", ", which slept",
+                                  ", which does file I/O, a yield or thread exit",
+                                  ", which waited on a busy lock", ", which suspended this thread",
+                                  ", dropped by the 1 s deadlock breaker", ", which always lets others in" };
+    for (k = 0; k < 32; k++)
+        if (s_gil_hist[k].seq > rel_seq && s_gil_hist[k].tid != GetCurrentThreadId()) {
+            n++;
+            if (s_gil_hist[k].prio < lo) { lo = s_gil_hist[k].prio; lo_tid = s_gil_hist[k].tid; }
+        }
+    if (!n)
+        return;
+    if (lo > my_prio) {
+        InterlockedIncrement(&s_gil_watch_xbox);   /* only higher threads ran: the Xbox does that too */
+        return;
+    }
+    route = t_gil_rel_why == REL_KCALL && t_gil_rel_drop ? 4 + (t_gil_rel_drop > 3 ? 3 : t_gil_rel_drop - 1)
+          : t_gil_rel_why;
+    if (route > 7) route = 7;
+    InterlockedIncrement(&s_gil_watch_n[route]);
+    {
+        static LONG lines;
+        if (InterlockedIncrement(&lines) <= 40)
+            fprintf(stderr, "  [GIL] sound pass interrupted: host thread %lu (priority %d) ran while this "
+                            "thread (%lu, priority %d) was out for %s%s (kernel ordinal %u); %d holder(s) meanwhile\n",
+                    (unsigned long)lo_tid, lo, (unsigned long)GetCurrentThreadId(), my_prio,
+                    why[t_gil_rel_why < 5 ? t_gil_rel_why : 0],
+                    t_gil_rel_why == REL_KCALL ? drop[t_gil_rel_drop < 8 ? t_gil_rel_drop : 0] : "",
+                    t_gil_rel_why == REL_KCALL ? t_gil_rel_ord : 0u, n);
+    }
+}
+
+/* For the [CRI] stats line (recomp_manual.c): intrusions into sound passes
+ * since the last call, by route, then reset. */
+void xbox_gil_watch(int delta) { t_gil_watch += delta; }
+void xbox_gil_sched_report(void)
+{
+    LONG v[8], x, slow, w50;
+    int k;
+    for (k = 0; k < 8; k++) v[k] = InterlockedExchange(&s_gil_watch_n[k], 0);
+    x = InterlockedExchange(&s_gil_watch_xbox, 0);
+    slow = InterlockedExchange(&s_gil_resv_slow, 0);
+    w50 = InterlockedExchange(&s_gil_wait50, 0);
+    if (!gil_prio_mode())
+        return;
+    fprintf(stderr, "[GIL] 5 s: sound passes entered by a thread at or below them: %ld "
+                    "(kernel call %ld, its wait %ld, its sleep %ld, other blocking call %ld, "
+                    "function-entry yield %ld, poll yield %ld); by higher threads only (as on the Xbox) %ld; "
+                    "kernel calls over 2 ms %ld; waits over 50 ms %ld\n",
+            v[1] + v[2] + v[3] + v[4] + v[5] + v[6] + v[7], v[1], v[4], v[5], v[6] + v[7], v[2], v[3],
+            x, slow, w50);
+}
+
+/* Drop this thread's reservation: its kernel call is about to block. */
+void xbox_gil_resv_drop(int why)
+{
+    if (!t_gil_resv_held)
+        return;
+    EnterCriticalSection(&s_gil_cs);
+    if (gil_resv_take_mine()) {
+        t_gil_rel_drop = why;
+        if (!s_gil_busy)
+            gil_prio_grant_next();
+    } else if (!t_gil_rel_drop) {
+        t_gil_rel_drop = DROP_BREAKER;
+    }
+    LeaveCriticalSection(&s_gil_cs);
+}
+
 static void gil_lock_prio(void)
 {
-    int prio = gil_my_prio(), slot = -1, k;
+    int prio = gil_my_prio(), slot = -1, k, low = t_gil_low, resv = 0;
+    t_gil_low = 0;
     EnterCriticalSection(&s_gil_cs);
-    if (!s_gil_busy && s_gil_pw_n == 0) {
+    if (t_gil_resv_held)
+        resv = gil_resv_take_mine();        /* back from a call that did not block */
+    if (!s_gil_busy && (s_gil_pw_n == 0 || resv)) {
+        /* Free, and either nobody waits or this thread never stopped running
+         * (anyone above it was let in when the lock went free). */
         s_gil_busy = 1;
     } else {
         for (k = 0; k < s_gil_pw_n; k++)      /* reuse a finished slot */
@@ -814,13 +1005,17 @@ static void gil_lock_prio(void)
         if (slot < 0 && s_gil_pw_n < GIL_PW_MAX)
             slot = s_gil_pw_n++;
         if (slot >= 0) {
-            s_gil_pw[slot].ticket = s_gil_next++;
+            /* Back from a kernel call with a higher thread holding the lock:
+             * first among its equals, since it was running. */
+            s_gil_pw[slot].ticket = resv ? 0 : s_gil_next++;
             s_gil_pw[slot].prio = prio;
+            s_gil_pw[slot].low = low;
             s_gil_pw[slot].granted = 0;
             s_gil_pw[slot].since_ms = GetTickCount64();
             s_gil_pw[slot].tid = GetCurrentThreadId();
+            s_gil_pw[slot].noted = 0;
         }
-        if (prio > s_gil_prio_holder)
+        if (!low && prio > s_gil_prio_holder)
             g_gil_contended = 1;
         if (!s_gil_busy)
             gil_prio_grant_next();
@@ -831,9 +1026,9 @@ static void gil_lock_prio(void)
         } else {
             while (!s_gil_pw[slot].granted) {
                 if (!SleepConditionVariableCS(&s_gil_cv, &s_gil_cs, 1)
-                    && (prio >= s_gil_prio_holder
-                        || GetTickCount64() - s_gil_pw[slot].since_ms >= 50))
-                    g_gil_contended = 1;   /* equal or higher, or left out 50 ms: ask for a turn */
+                    && s_gil_busy && (low || prio >= s_gil_prio_holder))
+                    g_gil_contended = 1;   /* equal or higher, or a poll yield: ask for a turn after 1 ms */
+                gil_prio_watchdogs(slot);
                 if (!s_gil_busy)
                     gil_prio_grant_next();
             }
@@ -849,6 +1044,15 @@ static void gil_lock_prio(void)
             s_gil_pw_n--;
     }
     g_gil_contended = gil_prio_higher_waiting(prio);
+    {
+        int h = (int)(++s_gil_hseq & 31);
+        s_gil_hist[h].seq = s_gil_hseq;
+        s_gil_hist[h].tid = GetCurrentThreadId();
+        s_gil_hist[h].prio = prio;
+    }
+    if (t_gil_watch > 0 && t_gil_rel_seq)
+        gil_watch_note(t_gil_rel_seq, prio);
+    t_gil_rel_seq = 0;
     LeaveCriticalSection(&s_gil_cs);
 }
 
@@ -857,6 +1061,20 @@ static void gil_unlock_prio(void)
     EnterCriticalSection(&s_gil_cs);
     s_gil_holder_tid = 0;
     s_gil_busy = 0;
+    if (t_gil_want_resv) {
+        /* Reserved for this kernel call at the priority it held the lock at. */
+        if (s_gil_resv_n < GIL_RESV_MAX) {
+            int r = s_gil_resv_n++;
+            s_gil_resv[r].tid = GetCurrentThreadId();
+            s_gil_resv[r].prio = s_gil_prio_holder;
+            s_gil_resv[r].ord = t_gil_want_ord;
+            s_gil_resv[r].us = gil_now_us();
+            s_gil_resv[r].noted = 0;
+            t_gil_resv_held = 1;
+        }
+        t_gil_want_resv = 0;
+    }
+    t_gil_rel_seq = s_gil_hseq;
     s_gil_prio_holder = -100;
     gil_prio_grant_next();
     LeaveCriticalSection(&s_gil_cs);
@@ -988,8 +1206,49 @@ int xbox_gil_suspend(void)
     int d = t_gil_depth;
     if (d > 0 && gil_enabled()) {
         t_gil_depth = 0;
+        if (!t_gil_want_resv)
+            t_gil_rel_why = REL_OTHER;
+        t_gil_rel_drop = DROP_NONE;
         gil_unlock();
     }
+    return d;
+}
+
+/* CT3-nx: kernel calls that always let other threads in (RECOMP_GIL_PRIO):
+ * they block on the Xbox (file I/O waits for the drive or disk), give the
+ * processor away (a yield, a delay), or never come back (thread exit). The
+ * waits reserve until they find the object unsignalled (kernel_sync.c). */
+static int kcall_lets_others_in(uint32_t ord)
+{
+    switch (ord) {
+    case 99:                                            /* KeDelayExecutionThread */
+    case 238:                                           /* NtYieldExecution */
+    case 258:                                           /* PsTerminateSystemThread */
+    case 190: case 195: case 196: case 198: case 200:   /* NtCreateFile, NtDeleteFile, NtDeviceIoControlFile, */
+    case 202: case 207: case 210: case 211: case 218:   /* NtFlushBuffersFile, NtFsControlFile, NtOpenFile, */
+    case 219: case 220: case 226: case 236: case 237:   /* queries, NtReadFile(Scatter), NtSetInformationFile, */
+        return 1;                                       /* NtWriteFile(Gather) */
+    default:
+        return 0;
+    }
+}
+
+/* A kernel call's release: reserved for the caller under RECOMP_GIL_PRIO. */
+static int xbox_gil_suspend_kcall(uint32_t ord)
+{
+    int d;
+    if (t_gil_depth > 0 && gil_enabled() && gil_prio_mode()) {
+        t_gil_rel_why = REL_KCALL;
+        t_gil_rel_ord = ord;
+        if (!kcall_lets_others_in(ord)) {
+            t_gil_want_resv = 1;
+            t_gil_want_ord = ord;
+        }
+    }
+    d = xbox_gil_suspend();
+    t_gil_want_resv = 0;
+    if (t_gil_rel_why == REL_KCALL && kcall_lets_others_in(ord))
+        t_gil_rel_drop = DROP_START;
     return d;
 }
 
@@ -1013,6 +1272,10 @@ void xbox_gil_resume(int depth)
 void recomp_spin_yield(void)
 {
     int d = xbox_gil_suspend();
+    if (d > 0) {
+        t_gil_rel_why = REL_SPIN;
+        t_gil_low = 1;              /* CT3-nx: a poll loop waits behind everyone */
+    }
     SwitchToThread();
     xbox_gil_resume(d);
 }
@@ -1027,6 +1290,17 @@ void xbox_wait_yield_ms(unsigned ms)
     xbox_gil_resume(d);
 }
 
+/* CT3-nx: a function-entry yield (someone above, or of equal priority for
+ * 1 ms, asked for a turn): back in line at this thread's own priority. */
+static void gil_preempt_yield(void)
+{
+    int d = xbox_gil_suspend();
+    if (d > 0)
+        t_gil_rel_why = REL_PREEMPT;
+    SwitchToThread();
+    xbox_gil_resume(d);
+}
+
 /* RECOMP_PREEMPT: someone is waiting -- yield, unless this is an ISR or DPC
  * (which run to completion on the Xbox) or code this thread raised to
  * DISPATCH. Not the global IRQL: the timer thread raises it before it
@@ -1037,7 +1311,7 @@ void recomp_preempt(void)
 {
     if (t_gil_depth <= 0 || t_gil_nopreempt || xbox_thread_holds_dispatch())
         return;
-    recomp_spin_yield();
+    gil_preempt_yield();
 }
 
 #define GUEST_CALL(f) do { xbox_gil_enter(); (f)(); xbox_gil_leave(); } while (0)
@@ -2377,6 +2651,8 @@ static NTSTATUS kdisp_wait(uint32_t count, const uint32_t *vas,
                 if (ms - spent < slice)
                     slice = ms - spent;
             }
+            if (ms != 0)
+                xbox_gil_resv_drop(1);  /* CT3-nx: not signalled: this wait blocks */
             SleepConditionVariableCS(&g_kdisp_cv, &g_kdisp_cs, slice);
         }
     }
@@ -5202,8 +5478,10 @@ static void bridge_ObReferenceObjectByHandle(void)
         } else if (tid) {
             /* A just-created thread registers itself when it starts running. */
             int tries;
-            for (tries = 0; tries < 200 && !(object = guest_thread_by_tid(tid)); tries++)
+            for (tries = 0; tries < 200 && !(object = guest_thread_by_tid(tid)); tries++) {
+                xbox_gil_resv_drop(2);  /* CT3-nx: the new thread has to run */
                 Sleep(1);
+            }
         }
     }
     if (object_ptr) BRIDGE_MEM32(object_ptr) = object;
@@ -10611,7 +10889,9 @@ static void kernel_thunk_dispatch(void)
         kernel_thunk_dispatch_body();
         return;
     }
-    int gil = xbox_gil_suspend();                /* the kernel is not guest code */
+    int gil = xbox_gil_suspend_kcall(g_kernel_dispatch_slot >= 0
+                                     && g_kernel_dispatch_slot < XBOX_KERNEL_THUNK_TABLE_SIZE
+                                     ? g_slot_ordinals[g_kernel_dispatch_slot] : 0);
     pending_start_flush(GetCurrentThreadId());   /* threads this one created */
     xbox_kernel_busy(1);
     kernel_thunk_dispatch_body();

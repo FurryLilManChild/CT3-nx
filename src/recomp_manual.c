@@ -149,6 +149,8 @@ extern void xbox_gil_nopreempt(int delta);
 extern void xbox_wait_yield_ms(unsigned ms);
 extern unsigned xbox_gil_switched_in(void);
 extern unsigned long xbox_gil_prev_other(void);
+extern void xbox_gil_watch(int delta);          /* kernel_bridge.c: log intrusions into a pass */
+extern void xbox_gil_sched_report(void);
 static uint64_t cri_now_ms(void);
 void xbox_thread_state_print(uintptr_t key, const char *who);
 uintptr_t xbox_thread_key(void);
@@ -215,6 +217,7 @@ static void cri_stats(uint64_t now)
             s_cri_st.lock_giveups, s_cri_st.pass_waits, (unsigned long long)s_cri_st.pass_wait_ms,
             (unsigned long long)s_cri_st.max_hold_ms, MEM32(0x002E00BCu),
             MEM32(0x002E00BCu) ? s_cri_lock_caller : 0u);
+    xbox_gil_sched_report();
     memset(&s_cri_st, 0, sizeof s_cri_st);
     s_cri_st.next = now + 5000;
 }
@@ -375,7 +378,9 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
             t_cri_pass_switch0 = xbox_gil_switched_in();
             t_cri_pass_t0 = cri_now_ms();
         }
+        xbox_gil_watch(1);
         sub_000B97E0_gen();
+        xbox_gil_watch(-1);
         if (atomic) xbox_gil_nopreempt(-1);
     }
     if (--t_cri_pass_depth == 0) {

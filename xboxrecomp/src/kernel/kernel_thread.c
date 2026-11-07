@@ -436,6 +436,10 @@ void xbox_thread_suspend_point(void)
     k = t_kslot;
     if (!k || k->coop <= 0)
         return;
+    {   /* CT3-nx: stopping here holds nothing (RECOMP_GIL_PRIO) */
+        extern void xbox_gil_resv_drop(int why);
+        xbox_gil_resv_drop(5);
+    }
     while (k->coop > 0)
         WaitForSingleObject(k->coop_ev, 5);
 }
@@ -484,6 +488,10 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
         if (prev == (DWORD)-1)
             return STATUS_UNSUCCESSFUL;
         d = xbox_gil_suspend();
+        {
+            extern void xbox_gil_resv_drop(int why);
+            xbox_gil_resv_drop(5);
+        }
         w32_wait_while_suspended(ThreadHandle);
         xbox_gil_resume(d);
         if (PreviousSuspendCount)

@@ -516,6 +516,10 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
         static int poll = -1;
         if (poll < 0) { const char *e = getenv("RECOMP_CS_POLL"); poll = !(e && *e == '0'); }
         if (slot) InterlockedIncrement(&slot->waiters);
+        {   /* CT3-nx: blocked on a busy lock, so lower threads may run (RECOMP_GIL_PRIO) */
+            extern void xbox_gil_resv_drop(int why);
+            xbox_gil_resv_drop(4);
+        }
         if (!poll) {
             EnterCriticalSection(cs);
         } else {

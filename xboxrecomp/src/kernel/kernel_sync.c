@@ -194,6 +194,28 @@ static NTSTATUS xbox_wait_result_to_ntstatus(DWORD result, ULONG count)
     }
 }
 
+/* CT3-nx (RECOMP_GIL_PRIO): a wait keeps the caller's kernel-call
+ * reservation while its object is already signalled, as on the Xbox, where
+ * such a wait does not switch threads; only a wait that really blocks lets
+ * lower threads run (kernel_bridge.c, xbox_gil_resv_drop). */
+void xbox_gil_resv_drop(int why);
+static DWORD ks_wait1(HANDLE h, DWORD ms, BOOL alertable)
+{
+    DWORD r = WaitForSingleObjectEx(h, 0, alertable);
+    if (r != WAIT_TIMEOUT || ms == 0)
+        return r;
+    xbox_gil_resv_drop(1);
+    return WaitForSingleObjectEx(h, ms, alertable);
+}
+static DWORD ks_waitn(DWORD n, const HANDLE *h, BOOL all, DWORD ms, BOOL alertable)
+{
+    DWORD r = WaitForMultipleObjectsEx(n, h, all, 0, alertable);
+    if (r != WAIT_TIMEOUT || ms == 0)
+        return r;
+    xbox_gil_resv_drop(1);
+    return WaitForMultipleObjectsEx(n, h, all, ms, alertable);
+}
+
 NTSTATUS __stdcall xbox_NtWaitForSingleObject(
     HANDLE Handle,
     BOOLEAN Alertable,
@@ -202,7 +224,7 @@ NTSTATUS __stdcall xbox_NtWaitForSingleObject(
     DWORD ms = xbox_nt_timeout_to_ms(Timeout);
     DWORD result;
     xbox_kernel_busy(-1);   /* blocked in a wait: a safe point */
-    result = WaitForSingleObjectEx(Handle, ms, Alertable);
+    result = ks_wait1(Handle, ms, Alertable);
     xbox_kernel_busy(1);
     return xbox_wait_result_to_ntstatus(result, 1);
 }
@@ -224,7 +246,7 @@ NTSTATUS __stdcall xbox_NtWaitForSingleObjectEx(
     (void)WaitMode;
 
     xbox_kernel_busy(-1);   /* blocked in a wait: a safe point */
-    result = WaitForSingleObjectEx(Handle, ms, Alertable);
+    result = ks_wait1(Handle, ms, Alertable);
     xbox_kernel_busy(1);
     return xbox_wait_result_to_ntstatus(result, 1);
 }
@@ -244,7 +266,7 @@ NTSTATUS __stdcall xbox_NtWaitForMultipleObjectsEx(
     bWaitAll = (WaitType == 0) ? TRUE : FALSE;
 
     xbox_kernel_busy(-1);   /* blocked in a wait: a safe point */
-    result = WaitForMultipleObjectsEx(Count, Handles, bWaitAll, ms, Alertable);
+    result = ks_waitn(Count, Handles, bWaitAll, ms, Alertable);
     xbox_kernel_busy(1);
     return xbox_wait_result_to_ntstatus(result, Count);
 }
@@ -268,7 +290,7 @@ NTSTATUS __stdcall xbox_KeWaitForSingleObject(
     DWORD ms = xbox_nt_timeout_to_ms(Timeout);
     DWORD result;
     xbox_kernel_busy(-1);   /* blocked in a wait: a safe point */
-    result = WaitForSingleObjectEx(hObject, ms, Alertable);
+    result = ks_wait1(hObject, ms, Alertable);
     xbox_kernel_busy(1);
     return xbox_wait_result_to_ntstatus(result, 1);
 }
@@ -293,7 +315,7 @@ NTSTATUS __stdcall xbox_KeWaitForMultipleObjects(
     /* Objects[] is an array of PVOID which we treat as HANDLE[] */
     DWORD result;
     xbox_kernel_busy(-1);   /* blocked in a wait: a safe point */
-    result = WaitForMultipleObjectsEx(Count, (HANDLE*)Objects,
+    result = ks_waitn(Count, (HANDLE*)Objects,
                                             bWaitAll, ms, Alertable);
     xbox_kernel_busy(1);
     return xbox_wait_result_to_ntstatus(result, Count);

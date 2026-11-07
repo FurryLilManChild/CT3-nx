@@ -112,6 +112,13 @@ the rule.
     suspected trigger only somewhere in the run, say "possible", and look for a mechanism that is present in
     every failing run (here: pre-emption inside the server pass).
 
+24. **"Like the console" has to mean every rule, not the main one.** Switch test 7: the priority guest lock copied
+    the Xbox's "highest priority runs", but every kernel call still handed the lock to whoever waited, lower
+    threads included, and a 50 ms rule of mine could force a yield. Neither is on the Xbox, and the sound pass
+    was entered 8 times (quitting a shift: the same SJ ring crash). Mark asked why we did not simply do what the
+    Xbox does. Rule: when copying console behaviour, list each place the port still differs and say why; a
+    safety net should log, not change what the game sees, unless the alternative is a certain hang.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

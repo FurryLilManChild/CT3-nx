@@ -1,5 +1,23 @@
 # Progress log (newest first)
 
+## 2026-11-06: Xbox scheduling rules for the guest lock, for Switch test 8
+
+- Switch test 7 (priority lock): booted and played (about 30 fps in a shift). Quitting a shift to the menu
+  crashed with the SJ ring error -3 inside a sound server pass; the report said other guest threads ran 8 times
+  during that pass (last: host thread 1006, priority 0). The pass's only lock releases were kernel calls
+  (KfRaiseIrql 160, KfLowerIrql 161, RtlLeaveCriticalSection 294, from the ICALL history). Not proven which route
+  let thread 1006 in: those calls released the lock to any waiter, and the 50 ms rule could force a yield.
+- Mark: do what the Xbox does. RECOMP_GIL_PRIO now follows its rules (kernel_bridge.c): a kernel call keeps the
+  lock reserved for its caller against equal and lower threads until it really blocks (a wait whose object is
+  not signalled (kernel_sync.c, kdisp_wait), a sleep or delay, file I/O, a yield, thread exit, a busy guest lock
+  (kernel_rtl.c), a suspension (kernel_thread.c)); higher threads and DPCs still get in. The 50 ms rule is gone;
+  poll-loop yields wait behind everyone. Watchdogs log only (waits over 50 ms, reservations over 2 ms); a
+  reservation held 1 s is dropped as a deadlock and logged loudly.
+- New log lines: "[GIL] sound pass interrupted" (who ran, how the lock got free) and a "[GIL] 5 s" summary with
+  the [CRI] stats.
+- Known difference left: equal-priority threads still take turns after 1 ms (the Xbox's time slice is longer;
+  value not checked).
+
 ## 2026-11-06: the guest lock by guest priority (RECOMP_GIL_PRIO), for Switch test 7
 
 - Mark's question: if the Xbox keeps the sound code safe by thread priority, why not do the same. So the guest
