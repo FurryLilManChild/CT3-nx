@@ -366,7 +366,42 @@ DWORD GetThreadId(HANDLE h)
 }
 
 DWORD GetCurrentProcessId(void) { return (DWORD)getpid(); }
-HANDLE GetCurrentThread(void)   { return t_self_obj ? (HANDLE)t_self_obj : PSEUDO_CURRENT_THREAD; }
+/* CT3-nx: a thread this layer did not create (the process's main thread,
+ * host runtime threads) gets a thread object the first time it asks for
+ * itself. Before, it had none: GetCurrentThread was the pseudo handle, so
+ * Set/GetThreadPriority on it did nothing (always NORMAL), and the handle the
+ * kernel stored for it (DuplicateHandle of the pseudo handle) meant "the
+ * caller" when another thread used it. Crazy Taxi 3's main thread raises
+ * itself to 16 to hold the CRI sound lock; on the Switch it stayed at 0, and
+ * with the guest lock handed over by priority (Switch test 8) the sound
+ * idle thread at +2 kept it out for good (black screen). */
+static w32_object *obj_alloc(w32_kind kind);
+static w32_object *w32_self(void)
+{
+    if (!t_self_obj) {
+        w32_object *o = obj_alloc(K_THREAD);
+        o->tid = GetCurrentThreadId();
+        o->thread = pthread_self();
+        o->priority = 0;                  /* THREAD_PRIORITY_NORMAL */
+#if defined(__SWITCH__)
+        {
+            extern Handle threadGetCurHandle(void);   /* libnx */
+            o->nx_handle = threadGetCurHandle();
+        }
+#else
+        {
+            struct sched_param sp;
+            int pol;
+            if (pthread_getschedparam(pthread_self(), &pol, &sp) == 0)
+                o->host_base = sp.sched_priority;
+            o->started = 1;
+        }
+#endif
+        t_self_obj = o;
+    }
+    return t_self_obj;
+}
+HANDLE GetCurrentThread(void)   { return (HANDLE)w32_self(); }
 HANDLE GetCurrentProcess(void)  { return PSEUDO_CURRENT_PROCESS; }
 
 /* Registry of live objects.
@@ -1421,7 +1456,7 @@ static void host_priority_apply(w32_object *o)
 
 BOOL SetThreadPriority(HANDLE h, int priority)
 {
-    w32_object *o = (h == PSEUDO_CURRENT_THREAD) ? t_self_obj : obj_from(h);
+    w32_object *o = (h == PSEUDO_CURRENT_THREAD) ? w32_self() : obj_from(h);
     if (o && o->kind == K_THREAD) {
         o->priority = priority;
         host_priority_apply(o);
@@ -1431,7 +1466,7 @@ BOOL SetThreadPriority(HANDLE h, int priority)
 
 int GetThreadPriority(HANDLE h)
 {
-    w32_object *o = (h == PSEUDO_CURRENT_THREAD) ? t_self_obj : obj_from(h);
+    w32_object *o = (h == PSEUDO_CURRENT_THREAD) ? w32_self() : obj_from(h);
     return (o && o->kind == K_THREAD) ? o->priority : THREAD_PRIORITY_NORMAL;
 }
 
@@ -1439,7 +1474,7 @@ VOID SwitchToThread(void) { sched_yield(); }
 
 DWORD QueueUserAPC(PAPCFUNC func, HANDLE thread, ULONG_PTR data)
 {
-    w32_object *o = (thread == PSEUDO_CURRENT_THREAD) ? t_self_obj : obj_from(thread);
+    w32_object *o = (thread == PSEUDO_CURRENT_THREAD) ? w32_self() : obj_from(thread);
     if (!o || o->kind != K_THREAD) return 0;
     pthread_mutex_lock(&o->lock);
     DWORD ok = 0;

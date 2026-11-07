@@ -119,6 +119,12 @@ the rule.
     Xbox does. Rule: when copying console behaviour, list each place the port still differs and say why; a
     safety net should log, not change what the game sees, unless the alternative is a certain hang.
 
+25. **Before removing a safety net, read what it was rescuing.** Switch test 8 removed the 50 ms rule and went to a
+    black screen. Test 7's own log had the answer: the 50 ms rule kept letting the main thread in at
+    "priority 0" while it held the CRI sound lock, which raises it to 16. On the Switch the main thread had no
+    thread object, so priority changes to it did nothing (win32_compat.c), and the sound idle thread at +2 then
+    kept it out for good. Rule: when a fallback fires, explain each firing before taking it away.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a
