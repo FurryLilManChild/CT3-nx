@@ -204,6 +204,17 @@ typedef struct {
     volatile unsigned long owner_tid;
     volatile long          depth;
     volatile LONG          waiters;     /* threads in the slow path of Enter (LONG for Interlocked*) */
+    /* CT3-nx: the Xbox's (NT's) critical section gives a released lock to
+     * its oldest waiter: Leave wakes it and it owns the lock, so a thread
+     * that leaves and enters again waits its turn. A host lock lets the
+     * leaver take it straight back. Switch test 8g: the loader worker
+     * (0x000A05E0) waited 140 s on 0x002D83C4 while the main thread left and
+     * entered it every frame of NOW LOADING (and the PC's intermittent stuck
+     * NOW LOADING). So waiters queue here, and Leave names the first. */
+    SRWLOCK                q_lock;
+    volatile DWORD         handoff_tid; /* the waiter the lock is promised to, or 0 */
+    DWORD                  q[16];
+    int                    q_n;
 } XBOX_CS_SLOT;
 
 static XBOX_CS_SLOT g_cs_table[XBOX_CS_TABLE_SIZE];
@@ -497,8 +508,12 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
     InterlockedIncrement(&g_cs_enters);
     crt_lock_trace("take", CriticalSection);
     if (TryEnterCriticalSection(cs)) {
-        xbox_cs_note_owner(cs);
-        return;
+        XBOX_CS_SLOT* s0 = xbox_cs_slot_of(cs);
+        if (!(s0 && s0->depth == 0 && s0->handoff_tid && s0->handoff_tid != GetCurrentThreadId())) {
+            xbox_cs_note_owner(cs);
+            return;
+        }
+        LeaveCriticalSection(cs);   /* promised to a waiter: queue behind it */
     }
     if (InterlockedIncrement(&g_cs_contention_reports) <= 16) {
         fprintf(stderr, "  [CS] thread %lu waiting on guest lock 0x%08X"
@@ -533,7 +548,13 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
         XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
         static int poll = -1;
         if (poll < 0) { const char *e = getenv("RECOMP_CS_POLL"); poll = !(e && *e == '0'); }
-        if (slot) InterlockedIncrement(&slot->waiters);
+        if (slot) {
+            InterlockedIncrement(&slot->waiters);
+            AcquireSRWLockExclusive(&slot->q_lock);
+            if (slot->q_n < 16)
+                slot->q[slot->q_n++] = GetCurrentThreadId();
+            ReleaseSRWLockExclusive(&slot->q_lock);
+        }
         {   /* CT3-nx: blocked on a busy lock, so lower threads may run (RECOMP_GIL_PRIO) */
             extern void xbox_gil_resv_drop(int why);
             xbox_gil_resv_drop(4);
@@ -556,7 +577,10 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
             QueryPerformanceCounter(&t0);
             next_report = t0.QuadPart + 2 * f.QuadPart;
             (void)spins;
-            while (!TryEnterCriticalSection(cs)) {
+            for (;;) {
+                DWORD h = slot ? slot->handoff_tid : 0;
+                if ((h == 0 || h == GetCurrentThreadId()) && TryEnterCriticalSection(cs))
+                    break;
                 /* Yield for the first 5 ms (a Windows Sleep(1) can last
                  * 15 ms, long enough to lose the handover), then sleep. */
                 QueryPerformanceCounter(&t);
@@ -577,7 +601,20 @@ VOID __stdcall xbox_RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
                 }
             }
         }
-        if (slot) InterlockedDecrement(&slot->waiters);
+        if (slot) {
+            int k;
+            AcquireSRWLockExclusive(&slot->q_lock);
+            for (k = 0; k < slot->q_n; k++)
+                if (slot->q[k] == GetCurrentThreadId()) {
+                    for (; k + 1 < slot->q_n; k++) slot->q[k] = slot->q[k + 1];
+                    slot->q_n--;
+                    break;
+                }
+            if (slot->handoff_tid == GetCurrentThreadId())
+                slot->handoff_tid = 0;
+            ReleaseSRWLockExclusive(&slot->q_lock);
+            InterlockedDecrement(&slot->waiters);
+        }
     }
     xbox_cs_note_owner(cs);
     if (g_cs_contention_reports <= 16) {
@@ -598,30 +635,19 @@ VOID __stdcall xbox_RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSectio
         crt_lock_trace("drop", CriticalSection);
         xbox_cs_clear_owner(cs);
         LeaveCriticalSection(cs);
-        /* Hand a contended lock over. A host critical section wakes a waiter
-         * on release but does not give it the lock, so a thread that
-         * releases and takes it again in a loop (Crazy Taxi 3's main thread,
-         * lock 0x002D83C4, every frame of NOW LOADING) wins every time and
-         * the waiter starves: the loader worker sat in Enter for good with
-         * the cache copy half done (PC play tests 16 and 18, thread dumps).
-         * On the Xbox the woken waiter takes it, so wait (up to 2 ms) for a
-         * waiter to take it before going on. */
-        if (slot && slot->waiters > 0 && slot->depth == 0) {
-            /* The performance counter, not GetTickCount64: that ticks every
-             * 15.6 ms on Windows, so "2 ms" was anything from 0 to 16. */
-            LARGE_INTEGER f, t, until;
+        /* Hand a contended lock to its oldest waiter, as the Xbox does (see
+         * XBOX_CS_SLOT). Before, this waited up to 2 ms for a waiter to take
+         * it; a waiter that slept 1 ms between tries still lost it. */
+        if (slot && slot->depth == 0 && slot->waiters > 0) {
             static LONG noted;
-            QueryPerformanceFrequency(&f);
-            QueryPerformanceCounter(&until);
-            until.QuadPart += f.QuadPart / 500;
-            do {
-                SwitchToThread();
-                QueryPerformanceCounter(&t);
-            } while (slot->waiters > 0 && slot->owner_tid == 0 && t.QuadPart < until.QuadPart);
-            if (InterlockedIncrement(&noted) <= 3)
-                fprintf(stderr, "  [CS] lock 0x%08X handed over (%s)\n",
+            AcquireSRWLockExclusive(&slot->q_lock);
+            if (slot->q_n > 0)
+                slot->handoff_tid = slot->q[0];
+            ReleaseSRWLockExclusive(&slot->q_lock);
+            if (slot->handoff_tid && InterlockedIncrement(&noted) <= 3)
+                fprintf(stderr, "  [CS] lock 0x%08X given to waiting thread %lu\n",
                         (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
-                        slot->owner_tid ? "a waiter took it" : "no taker in 2 ms");
+                        (unsigned long)slot->handoff_tid);
         }
     }
 }

@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-07: Switch test 8h, guest critical sections go to their oldest waiter
+
+- Switch test 8g: title screen, menus and character select at full speed. Then NOW LOADING for good: the loader
+  worker (thread 1016, 0x000A05E0) waited 140 s on 0x002D83C4 while the main thread left and entered it every
+  frame (0x000A07F0 enters, 0x000A0810 leaves, when 0x002D8630 is set), drawing at 60 fps. The same stall as the
+  PC's intermittent stuck NOW LOADING; the 2 ms handover wait in RtlLeaveCriticalSection was not enough.
+- Fix (kernel_rtl.c): as NT's critical section does, Leave gives a contended lock to its oldest waiter; anyone
+  else entering queues behind it.
+- Cloud boot with a pad script (Start, then A every 2.5 s): title, menus, character select (Axel), NOW LOADING
+  and into a shift ("STOP AND PICK UP CUSTOMERS!", the timer counting down), with "[CS] lock 0x002D83C4 given to
+  waiting thread 1015" in the log.
+
 ## 2026-11-07: Switch test 8g, a resumed higher thread runs first
 
 - Switch test 8f: black screen, though the same build reached the title in the cloud. The [GIL] snapshot: the -2
