@@ -145,6 +145,7 @@ static uintptr_t s_cri_lock_key;           /* xbox_thread_key() of the holder */
 static uintptr_t s_cri_pass_key[2];        /* the threads inside a pass now */
 static uint32_t  s_cri_lock_stack[48];     /* its guest stack when it took the lock */
 extern uintptr_t xbox_thread_key(void);
+extern void xbox_gil_nopreempt(int delta);
 extern void xbox_thread_state_print(uintptr_t key, const char *who);
 
 static void cri_holder_report(void)
@@ -328,7 +329,22 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
         }
     }
     t_cri_pass_depth++;
-    sub_000B97E0_gen();
+    /* Switch tests 4 and 6 (and PC play test 12): the SJ ring check 0x000B8420
+     * (put a chunk back: its position must follow the ring's) failed with -3
+     * on the +1 server's stack, the second time with no lock give-up at all.
+     * The SJ ring calls have no lock of their own (0x000BCC50 / 0x000BCC70 only
+     * count): they rely on the server's priority, so nothing below it runs in
+     * the middle of one. Here the guest lock could still be handed to another
+     * thread at any function entry in the pass (RECOMP_PREEMPT), so a lower
+     * thread could work on the same ring half-way through. A pass now gives
+     * the lock up only in kernel calls. RECOMP_CRI_ATOMIC=0: as before. */
+    {
+        static int atomic = -1;
+        if (atomic < 0) { const char *e = getenv("RECOMP_CRI_ATOMIC"); atomic = !(e && *e == '0'); }
+        if (atomic) xbox_gil_nopreempt(1);
+        sub_000B97E0_gen();
+        if (atomic) xbox_gil_nopreempt(-1);
+    }
     if (--t_cri_pass_depth == 0) {
         int k; uintptr_t key = xbox_thread_key();
         for (k = 0; k < 2; k++) if (s_cri_pass_key[k] == key) s_cri_pass_key[k] = 0;

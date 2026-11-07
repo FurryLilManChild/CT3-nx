@@ -866,6 +866,11 @@ void recomp_preempt(void)
 #define GUEST_CALL_ATOMIC(f) do { xbox_gil_enter(); t_gil_nopreempt++; (f)(); \
                                   t_gil_nopreempt--; xbox_gil_leave(); } while (0)
 
+/* CT3-nx: a stretch of guest code that must not be pre-empted at function
+ * entries (recomp_manual.c: CRI's sound server passes). It still yields in
+ * kernel calls. */
+void xbox_gil_nopreempt(int delta) { t_gil_nopreempt += delta; }
+
 void xbox_gil_isr_begin(void) { xbox_gil_enter(); t_gil_nopreempt++; s_gil_holder_isr = 1; }
 void xbox_gil_isr_end(void)   { t_gil_nopreempt--; xbox_gil_leave(); }
 

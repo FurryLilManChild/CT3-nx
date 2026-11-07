@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 6: the SJ ring crash, twice, with no give-ups
+
+- Mark: both tries crashed a second into NOW LOADING. Both logs: [ICALL] 0x000B8120 from 0x000B84CC with -3 on the
+  +1 server's stack (esp 0x01FB9F64), then the crash: the same as test 4 and PC test 12. No "taking the lock
+  anyway" line in either run, so the give-up theory of test 4 was wrong.
+- 0x000B8420 (put a chunk back into an SJ ring) checks that the chunk's position follows the ring's read or write
+  position (mod the size) and reports -3 otherwise. The SJ calls have no lock of their own (0x000BCC50 and
+  0x000BCC70 only count): they rely on the +1 server's priority, so nothing lower runs in the middle of one. Our
+  guest lock can be handed to another thread at any function entry (RECOMP_PREEMPT) and in every kernel call, so a
+  lower thread could work on the same ring half-way through a pass.
+- Change: a server pass (0x000B97E0) is not pre-empted at function entries (xbox_gil_nopreempt; it still yields
+  in kernel calls). RECOMP_CRI_ATOMIC=0: as before.
+
 ## 2026-11-06: Switch test 5: in game with the city; the looping-audio freeze found
 
 - Mark: one boot froze with looping audio before NOW LOADING; the next got into a shift with the city drawn.

@@ -106,6 +106,12 @@ the rule.
     Switch LONG is 32-bit, and GCC 16 makes an incompatible pointer an error. Rule: check changed runtime files
     with -Werror=incompatible-pointer-types at least, and use LONG with Interlocked*.
 
+23. **A fix that fits one log is not proven until the failure comes back without it.** Switch test 4: I blamed
+    the CRI lock's 100 ms give-ups for the SJ ring crash because a give-up had happened earlier in the run, and
+    raised the limit. Test 6 crashed the same way twice with no give-up at all. Rule: when a log shows the
+    suspected trigger only somewhere in the run, say "possible", and look for a mechanism that is present in
+    every failing run (here: pre-emption inside the server pass).
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a
