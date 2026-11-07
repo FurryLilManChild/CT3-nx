@@ -979,6 +979,69 @@ void xbox_gil_sched_report(void)
                     "kernel calls over 2 ms %ld; waits over 50 ms %ld\n",
             v[1] + v[2] + v[3] + v[4] + v[5] + v[6] + v[7], v[1], v[4], v[5], v[6] + v[7], v[2], v[3],
             x, slow, w50);
+    {   /* who holds the lock and who waits for it, right now */
+        int k;
+        uint64_t now = GetTickCount64(), nu = gil_now_us();
+        EnterCriticalSection(&s_gil_cs);
+        fprintf(stderr, "[GIL] now: holder %lu (priority %d)%s; waiting:",
+                (unsigned long)s_gil_holder_tid, s_gil_busy ? s_gil_prio_holder : 0,
+                s_gil_busy ? "" : " (free)");
+        for (k = 0; k < s_gil_pw_n; k++)
+            if (!s_gil_pw[k].granted)
+                fprintf(stderr, " %lu:%d%s/%llums", (unsigned long)s_gil_pw[k].tid, s_gil_pw[k].prio,
+                        s_gil_pw[k].low ? "(poll)" : "",
+                        (unsigned long long)(now - s_gil_pw[k].since_ms));
+        fprintf(stderr, "; reserved:");
+        for (k = 0; k < s_gil_resv_n; k++)
+            fprintf(stderr, " %lu:%d/ordinal %u/%llums", (unsigned long)s_gil_resv[k].tid, s_gil_resv[k].prio,
+                    s_gil_resv[k].ord, (unsigned long long)((nu - s_gil_resv[k].us) / 1000));
+        fprintf(stderr, "\n");
+        LeaveCriticalSection(&s_gil_cs);
+    }
+}
+
+/* CT3-nx: a thread's priority changed (KeSetBasePriorityThread). On the
+ * Xbox that takes effect at once: a raised thread that is ready runs ahead of
+ * the caller. Here a thread waiting for the lock kept the priority it queued
+ * with, and a reservation kept its caller's. Switch test 8d: CRI's "run the
+ * -2 server now" (0x000B3360) raises the server to 16, resumes it and polls a
+ * flag the server clears; the server sat in the queue at -2 and the main
+ * thread polled for good (the Hitmaker logo, 0 fps). */
+void xbox_gil_prio_changed(DWORD tid, int prio)
+{
+    int k, changed = 0;
+    if (!gil_prio_mode())
+        return;
+    EnterCriticalSection(&s_gil_cs);
+    for (k = 0; k < s_gil_pw_n; k++)
+        if (!s_gil_pw[k].granted && s_gil_pw[k].tid == tid && s_gil_pw[k].prio != prio) {
+            s_gil_pw[k].prio = prio;
+            changed = 1;
+        }
+    for (k = 0; k < s_gil_resv_n; k++)
+        if (s_gil_resv[k].tid == tid && s_gil_resv[k].prio != prio && s_gil_resv[k].prio < 100) {
+            s_gil_resv[k].prio = prio;
+            changed = 1;
+        }
+    if (s_gil_busy && s_gil_holder_tid == tid && s_gil_prio_holder < 100 && s_gil_prio_holder != prio) {
+        s_gil_prio_holder = prio;
+        changed = 1;
+    }
+    if (changed) {
+        if (s_gil_busy) {
+            if (gil_prio_higher_waiting(s_gil_prio_holder))
+                g_gil_contended = 1;            /* someone now above the holder */
+        } else {
+            gil_prio_grant_next();
+        }
+        {
+            static LONG lines;
+            if (InterlockedIncrement(&lines) <= 20)
+                fprintf(stderr, "  [GIL] host thread %lu now at priority %d while queued, reserved or holding\n",
+                        (unsigned long)tid, prio);
+        }
+    }
+    LeaveCriticalSection(&s_gil_cs);
 }
 
 /* Drop this thread's reservation: its kernel call is about to block. */
@@ -5737,6 +5800,10 @@ static void bridge_KeSetBasePriorityThread(void)
     HANDLE h = guest_thread_host_or_self(STACK_ARG(0));
     static int shown;
     g_eax = h ? (uint32_t)xbox_KeSetBasePriorityThread(h, (LONG)STACK_ARG(1)) : 0;
+    if (h) {
+        extern void xbox_gil_prio_changed(DWORD tid, int prio);
+        xbox_gil_prio_changed(GetThreadId(h), GetThreadPriority(h));
+    }
     if (shown++ < 40)
         fprintf(stderr, "  [KERNEL] KeSetBasePriorityThread(0x%08X, %d) by host thread %lu%s: "
                         "host thread %lu now at %d\n",

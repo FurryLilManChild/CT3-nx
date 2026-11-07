@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 8e, priority changes reach queued threads
+
+- 8c with RECOMP_CRI_EXCL=0 (ct3_env.txt): 2 to 3 fps on the logos, then 0 fps at the Hitmaker logo for good
+  (watchdog at 80 s). The main thread was looping in CRI's "run the -2 server now" (0x000B3360, group 5's wake
+  function, registered at 0x000B369C): set flag 0x002E00C0, raise the server (handle [0x0034ED68]) to
+  [0x002E00A8], resume it, poll the flag (up to 200,000,000 times), then put it back to [0x002E00B8]. Its kernel
+  calls 246/143/250/231/224 ran 110,000 a second.
+- Likely cause (code): a thread waiting for the guest lock kept the priority it queued with, so the raised server
+  stayed at -2 behind the main thread at 0. Now KeSetBasePriorityThread updates a queued thread, a reservation
+  and the holder (xbox_gil_prio_changed), and asks the holder to yield when a waiter is now above it.
+- New: the 5 s [GIL] report includes the lock's holder, waiters (priority, time waiting) and reservations.
+
 ## 2026-11-06: Switch test 8d, a suspended thread no longer runs
 
 - Test 8c: priorities right at last (the main thread at 15 while it holds the CRI sound lock), and no sound pass
