@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 8c, three scheduling bugs from test 8b
+
+- Test 8b showed the Sega logo, then froze. Its log: the main thread still waited at priority 0 behind the sound
+  idle thread (1010, +2) right after setting itself to 16; and the sound pass (1012, priority 15) was entered by
+  1010 during its NtSuspendThread (ordinal 231) about 30 times a second.
+- Bugs found in the code: (1) host threads with no TIB of their own share the main thread's KTHREAD (0x4000), so
+  KeSetBasePriorityThread(0x4000) could change one of them instead of the main thread (now: a thread naming its
+  own KTHREAD means itself, and the main thread's entry wins); (2) the guest lock's fast path ignored kernel-call
+  reservations; (3) a cooperative NtSuspendThread left a thread that holds the lock running until its next
+  kernel call (now it is asked to yield at its next function entry, where it stops).
+- KeSetBasePriorityThread now logs the caller and the thread's resulting priority (first 40).
+
 ## 2026-11-06: Switch test 8b, the main thread's priority
 
 - Test 8 went to a black screen on both boots: at 14.5 s the main thread took the CRI sound lock (raising itself

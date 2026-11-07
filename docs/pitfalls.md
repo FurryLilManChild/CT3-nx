@@ -125,6 +125,10 @@ the rule.
     thread object, so priority changes to it did nothing (win32_compat.c), and the sound idle thread at +2 then
     kept it out for good. Rule: when a fallback fires, explain each firing before taking it away.
 
+26. **A new rule has to be enforced on every path.** Test 8's reservation was checked when the lock was handed
+    over, but not on the fast path (lock free, nobody queued), so a lower thread walked straight into the sound
+    pass. Rule: when adding a condition to a lock, list every place the lock can be taken and check each.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

@@ -467,6 +467,15 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
         prev = (DWORD)(InterlockedIncrement(&k->coop) - 1);
         InterlockedIncrement(&g_coop_any);
         {
+            /* CT3-nx: on the Xbox a suspended thread stops at once. Here it
+             * stops at its next suspend point; if it holds the guest lock and
+             * runs guest code without kernel calls, that point only comes at a
+             * function-entry yield, so ask for one (test 8b: the CRI sound
+             * idle thread kept running after the lock's unlock suspended it). */
+            extern volatile int g_gil_contended;
+            g_gil_contended = 1;
+        }
+        {
             static unsigned shown;
             if (shown++ < 3)
                 fprintf(stderr, "  [KERNEL] NtSuspendThread: tid %lu suspends tid %lu (cooperative)\n",

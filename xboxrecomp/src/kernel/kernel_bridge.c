@@ -475,7 +475,8 @@ static int g_thread_call_count = 0;
  *
  * ponytail: linear table of 64 threads; titles create a handful. */
 #define GUEST_THREADS_MAX 64
-static struct { uint32_t kthread; DWORD tid; HANDLE h; } s_guest_threads[GUEST_THREADS_MAX];
+static struct { uint32_t kthread; DWORD tid; HANDLE h; int is_main; } s_guest_threads[GUEST_THREADS_MAX];
+static RECOMP_TLS int t_gil_main;           /* the title's main thread (xbox_gil_mark_main) */
 static SRWLOCK s_guest_threads_lock = SRWLOCK_INIT;
 
 /* The calling thread's KTHREAD, registering the thread on first use. */
@@ -489,6 +490,7 @@ static uint32_t guest_thread_self(void)
     for (i = 0; i < GUEST_THREADS_MAX; i++) {
         if (s_guest_threads[i].tid == tid) {
             s_guest_threads[i].kthread = kthread;
+            s_guest_threads[i].is_main = t_gil_main;
             ReleaseSRWLockExclusive(&s_guest_threads_lock);
             return kthread;
         }
@@ -502,6 +504,7 @@ static uint32_t guest_thread_self(void)
         s_guest_threads[free_slot].kthread = kthread;
         s_guest_threads[free_slot].tid = tid;
         s_guest_threads[free_slot].h = h;
+        s_guest_threads[free_slot].is_main = t_gil_main;
     }
     ReleaseSRWLockExclusive(&s_guest_threads_lock);
     return kthread;
@@ -523,6 +526,11 @@ static void guest_thread_forget(void)
     ReleaseSRWLockExclusive(&s_guest_threads_lock);
 }
 
+/* CT3-nx: host threads without a TIB of their own share the main thread's
+ * (XBOX_TIB_MAIN, 0x4000), so several entries can carry that KTHREAD; the
+ * main thread's wins. Switch test 8b: KeSetBasePriorityThread(0x4000, 16)
+ * from the main thread (CRI's sound lock) changed another thread, the main
+ * thread stayed at 0 and hung behind the sound idle thread (+2). */
 static HANDLE guest_thread_host(uint32_t kthread)
 {
     HANDLE h = NULL;
@@ -530,8 +538,10 @@ static HANDLE guest_thread_host(uint32_t kthread)
     AcquireSRWLockShared(&s_guest_threads_lock);
     for (i = 0; i < GUEST_THREADS_MAX; i++)
         if (s_guest_threads[i].tid && s_guest_threads[i].kthread == kthread) {
-            h = s_guest_threads[i].h;
-            break;
+            if (!h || s_guest_threads[i].is_main)
+                h = s_guest_threads[i].h;
+            if (s_guest_threads[i].is_main)
+                break;
         }
     ReleaseSRWLockShared(&s_guest_threads_lock);
     return h;
@@ -671,7 +681,6 @@ int xbox_thread_holds_dispatch(void);     /* kernel_hal.c */
  *     of a race in waits (12-18 fps, was 17-22 with main-only), and their
  *     work is not audible.
  * ISRs and DPCs are never pre-empted (t_gil_nopreempt), as before. */
-static RECOMP_TLS int t_gil_main;
 void xbox_gil_mark_main(void) { t_gil_main = 1; }
 
 static int gil_eager(void)
@@ -995,9 +1004,13 @@ static void gil_lock_prio(void)
     EnterCriticalSection(&s_gil_cs);
     if (t_gil_resv_held)
         resv = gil_resv_take_mine();        /* back from a call that did not block */
-    if (!s_gil_busy && (s_gil_pw_n == 0 || resv)) {
-        /* Free, and either nobody waits or this thread never stopped running
-         * (anyone above it was let in when the lock went free). */
+    /* Free, and either nobody waits or this thread never stopped running
+     * (anyone above it was let in when the lock went free) -- unless another
+     * thread's kernel call has it reserved at this priority or above (test 8b:
+     * this fast path skipped the reservations, and the sound idle thread (+2)
+     * got into a pass of the server (15) during its NtSuspendThread). */
+    if (!s_gil_busy && (s_gil_pw_n == 0 || resv)
+        && !(s_gil_resv_n && (low ? -1000 : prio) <= gil_resv_top())) {
         s_gil_busy = 1;
     } else {
         for (k = 0; k < s_gil_pw_n; k++)      /* reuse a finished slot */
@@ -1020,8 +1033,10 @@ static void gil_lock_prio(void)
         if (!s_gil_busy)
             gil_prio_grant_next();
         if (slot < 0) {                     /* table full: plain wait */
-            while (s_gil_busy)
+            while (s_gil_busy || (s_gil_resv_n && prio <= gil_resv_top())) {
                 SleepConditionVariableCS(&s_gil_cv, &s_gil_cs, 1);
+                gil_prio_watchdogs(-1);
+            }
             s_gil_busy = 1;
         } else {
             while (!s_gil_pw[slot].granted) {
@@ -5690,20 +5705,31 @@ static void bridge_KeDisconnectInterrupt(void)
 /* KeQueryBasePriorityThread (ordinal 124, 1 arg). The implementation has
  * existed in kernel_thread.c all along; only the bridge wrapper was
  * missing, so the thunk fell through to the fallback and returned 0. */
+static HANDLE guest_thread_host_or_self(uint32_t kthread)
+{
+    /* A thread naming its own KTHREAD (KeGetCurrentThread) means itself. */
+    if (kthread == g_fs_base)
+        return GetCurrentThread();
+    return guest_thread_host(kthread);
+}
+
 static void bridge_KeQueryBasePriorityThread(void)
 {
-    HANDLE h = guest_thread_host(STACK_ARG(0));
+    HANDLE h = guest_thread_host_or_self(STACK_ARG(0));
     g_eax = h ? (uint32_t)xbox_KeQueryBasePriorityThread(h) : 0;
 }
 
 static void bridge_KeSetBasePriorityThread(void)
 {
-    HANDLE h = guest_thread_host(STACK_ARG(0));
+    HANDLE h = guest_thread_host_or_self(STACK_ARG(0));
     static int shown;
-    if (shown++ < 16)
-        fprintf(stderr, "  [KERNEL] KeSetBasePriorityThread(0x%08X, %d)%s\n",
-                STACK_ARG(0), (int)STACK_ARG(1), h ? "" : " -- unknown thread");
     g_eax = h ? (uint32_t)xbox_KeSetBasePriorityThread(h, (LONG)STACK_ARG(1)) : 0;
+    if (shown++ < 40)
+        fprintf(stderr, "  [KERNEL] KeSetBasePriorityThread(0x%08X, %d) by host thread %lu%s: "
+                        "host thread %lu now at %d\n",
+                STACK_ARG(0), (int)STACK_ARG(1), (unsigned long)GetCurrentThreadId(),
+                STACK_ARG(0) == g_fs_base ? " (itself)" : "",
+                h ? (unsigned long)GetThreadId(h) : 0ul, h ? GetThreadPriority(h) : 0);
 }
 
 /* ── KeStallExecutionProcessor (ordinal 151, 1 arg) */
