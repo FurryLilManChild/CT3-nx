@@ -1,5 +1,13 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 8b, the main thread's priority
+
+- Test 8 went to a black screen on both boots: at 14.5 s the main thread took the CRI sound lock (raising itself
+  to 16) and resumed the sound idle thread (+2), which then held the guest lock at 99% of a core; the watchdog
+  showed the main thread waiting at priority 0. On the Switch the main thread had no thread object in
+  win32_compat.c, so its priority changes were lost; test 7's 50 ms rule had been letting it in. Fixed (w32_self:
+  any thread gets an object when it first asks for itself). Pitfall 25.
+
 ## 2026-11-06: Xbox scheduling rules for the guest lock, for Switch test 8
 
 - Switch test 7 (priority lock): booted and played (about 30 fps in a shift). Quitting a shift to the menu
