@@ -1,5 +1,15 @@
 # Progress log (newest first)
 
+## 2026-11-07: cloud boot test; 8f reaches the title screen there
+
+- Mark: use a cloud boot test until a build reaches the title screen, then send him an NRO. tools/linux/cloud_boot.sh
+  (lavapipe through mesa-vulkan-drivers, Xvfb, out/build-vk-linux; frames every 60 presents to out/cloud). The
+  disc came up as one tar (C:\CT3-nx\assets\cloud_game_root.tar) into assets/linux_root (ignored), with the save
+  from Mark's PC game_root (without one the game stops on "Unable to load game", waiting for A).
+- 8f in the cloud: Sega, Hitmaker, the title screen and the attract demo (city drawn) within 150 s. Seen: one
+  sound pass entered by a function-entry yield (equal priority: the +1 server and thread 1013 both at 1), and the
+  loader-style wait on 0x002D83C4 (thread 1016, 17 s, held by the main thread from 0x000A0804) still there.
+
 ## 2026-11-06: Switch test 8f, no suspension while holding a guest lock
 
 - Test 8e: black screen, no logos. [CS] reports: threads 1012 (the -2 server) and 1013 (the CRI file thread)
