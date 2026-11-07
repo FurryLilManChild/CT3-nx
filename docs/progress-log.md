@@ -10,8 +10,13 @@
   0x000BCC70 only count): they rely on the +1 server's priority, so nothing lower runs in the middle of one. Our
   guest lock can be handed to another thread at any function entry (RECOMP_PREEMPT) and in every kernel call, so a
   lower thread could work on the same ring half-way through a pass.
-- Change: a server pass (0x000B97E0) is not pre-empted at function entries (xbox_gil_nopreempt; it still yields
-  in kernel calls). RECOMP_CRI_ATOMIC=0: as before.
+- A theory, not proven: a server pass (0x000B97E0) is now not pre-empted at function entries
+  (xbox_gil_nopreempt; it still yields in kernel calls; RECOMP_CRI_ATOMIC=0: as before).
+- The test for it: when the ring error fires, "[CRI] SJ ring error -3" says whether the failing thread is inside a
+  pass, and how many times other guest threads ran during that pass (kernel_bridge.c counts, per thread, takings
+  of the guest lock after another thread held it). Other threads ran during the pass: the mid-pass hand-over
+  theory holds (and kernel calls inside the pass are the remaining way in). None ran: the ring was wrong before
+  the pass began and the theory is wrong.
 
 ## 2026-11-06: Switch test 5: in game with the city; the looping-audio freeze found
 

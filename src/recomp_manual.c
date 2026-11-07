@@ -146,6 +146,30 @@ static uintptr_t s_cri_pass_key[2];        /* the threads inside a pass now */
 static uint32_t  s_cri_lock_stack[48];     /* its guest stack when it took the lock */
 extern uintptr_t xbox_thread_key(void);
 extern void xbox_gil_nopreempt(int delta);
+extern unsigned xbox_gil_switched_in(void);
+extern unsigned long xbox_gil_prev_other(void);
+static uint64_t cri_now_ms(void);
+void xbox_thread_state_print(uintptr_t key, const char *who);
+uintptr_t xbox_thread_key(void);
+static RECOMP_TLS unsigned t_cri_pass_switch0;
+static RECOMP_TLS uint64_t t_cri_pass_t0;
+
+/* The test for the SJ ring crash (0x000B8420 -> error callback 0x000B8120
+ * with -3): if other guest code ran during the server pass the error came
+ * from, the guest lock was handed over mid-pass (what RECOMP_CRI_ATOMIC is
+ * meant to stop); if none did, the ring was already wrong before the pass
+ * and the cause is elsewhere. Called from recomp_icall_fail_log. */
+static void cri_ring_error_report(void)
+{
+    fprintf(stderr, "[CRI] SJ ring error -3: this thread %s a server pass (depth %d, %llu ms in); "
+            "other guest threads ran %u time(s) during it (last: host thread %lu); "
+            "sound lock count %u, passes running %d\n",
+            t_cri_pass_depth ? "is inside" : "is NOT inside", t_cri_pass_depth,
+            t_cri_pass_depth ? (unsigned long long)(cri_now_ms() - t_cri_pass_t0) : 0ull,
+            t_cri_pass_depth ? xbox_gil_switched_in() - t_cri_pass_switch0 : 0u,
+            xbox_gil_prev_other(), MEM32(0x002E00BCu), s_cri_active);
+    xbox_thread_state_print(xbox_thread_key(), "[CRI]   this thread");
+}
 extern void xbox_thread_state_print(uintptr_t key, const char *who);
 
 static void cri_holder_report(void)
@@ -342,6 +366,10 @@ void sub_000B97E0(void)                 /* one server pass over a job group */
         static int atomic = -1;
         if (atomic < 0) { const char *e = getenv("RECOMP_CRI_ATOMIC"); atomic = !(e && *e == '0'); }
         if (atomic) xbox_gil_nopreempt(1);
+        if (t_cri_pass_depth == 1) {
+            t_cri_pass_switch0 = xbox_gil_switched_in();
+            t_cri_pass_t0 = cri_now_ms();
+        }
         sub_000B97E0_gen();
         if (atomic) xbox_gil_nopreempt(-1);
     }
@@ -614,8 +642,13 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
  * (the ICALL macro pops the dummy return address and continues).
  * Focus on the ones that cause crashes or incorrect behavior.
  */
+static void cri_ring_error_report(void);
 void recomp_icall_fail_log(uint32_t va)
 {
+    if (va == 0x000B8120u) {
+        static unsigned n;
+        if (n++ < 5) cri_ring_error_report();
+    }
     /* CT3-nx: the call site (the return address the call pushed, at
      * [esp]) and the stack words above it, rate-limited per site: the first PC
      * stage run logged 19,765 null calls at 18 lines each (2026-10-28). */

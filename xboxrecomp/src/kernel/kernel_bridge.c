@@ -715,6 +715,15 @@ static volatile int s_gil_holder_isr;
 static struct { DWORD tid; int prio, isr; uint32_t n; uint64_t us; } s_gw[12];
 static uint64_t s_gw_other_us;
 
+/* CT3-nx: per thread, how often it took the lock after another thread had
+ * held it, and which thread that was (a CRI ring error reports whether other
+ * guest code ran during the server pass it happened in; recomp_manual.c). */
+static DWORD s_gil_last_tid;
+static RECOMP_TLS unsigned t_gil_switched_in;
+static RECOMP_TLS DWORD t_gil_prev_other;
+unsigned xbox_gil_switched_in(void) { return t_gil_switched_in; }
+unsigned long xbox_gil_prev_other(void) { return (unsigned long)t_gil_prev_other; }
+
 static void gil_lock(void)
 {
     uint64_t me;
@@ -764,6 +773,11 @@ static void gil_lock(void)
     }
     s_gil_holder_tid = GetCurrentThreadId();
     s_gil_holder_isr = 0;
+    if (s_gil_last_tid != s_gil_holder_tid) {      /* another thread ran since this one */
+        t_gil_switched_in++;
+        t_gil_prev_other = s_gil_last_tid;
+        s_gil_last_tid = s_gil_holder_tid;
+    }
     if (w_main) {
         LARGE_INTEGER b, f;
         uint64_t us;
