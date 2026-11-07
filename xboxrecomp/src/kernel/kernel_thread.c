@@ -424,9 +424,11 @@ void xbox_kernel_busy(int delta)
 static volatile LONG g_coop_any;   /* cooperative suspensions outstanding, all threads */
 
 /* CT3-nx: is this thread's cooperative suspension outstanding? */
+int xbox_thread_guest_cs_held(void);   /* kernel_rtl.c */
+
 int xbox_thread_suspend_pending(void)
 {
-    if (!g_coop_any)
+    if (!g_coop_any || xbox_thread_guest_cs_held())
         return 0;
     if (!t_kslot)
         t_kslot = kbusy_slot(GetCurrentThreadId(), 0);
@@ -437,8 +439,8 @@ void xbox_thread_suspend_point(void)
 {
     KThreadSlot *k;
 
-    if (!g_coop_any)
-        return;
+    if (!g_coop_any || xbox_thread_guest_cs_held())
+        return;   /* CT3-nx: not while it holds a guest lock (see kernel_rtl.c) */
     /* The suspender makes the slot, so a thread that has never been in the
      * kernel (no t_kslot yet) still finds its count. */
     if (!t_kslot)

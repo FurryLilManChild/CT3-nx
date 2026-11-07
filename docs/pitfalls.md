@@ -129,6 +129,11 @@ the rule.
     over, but not on the fast path (lock free, nobody queued), so a lower thread walked straight into the sound
     pass. Rule: when adding a condition to a lock, list every place the lock can be taken and check each.
 
+27. **Making a stop point stricter changes where threads stop.** Test 8d made a suspended thread stop as soon as
+    it got the guest lock back, which is right in general, but that point can be the return from
+    RtlEnterCriticalSection: the CRI idle thread stopped holding XAPI's thread-startup lock and two other threads
+    waited on it for good (test 8e, black screen). Rule: a cooperative stop point must not be inside a guest lock.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

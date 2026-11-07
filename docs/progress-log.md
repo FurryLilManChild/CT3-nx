@@ -1,5 +1,16 @@
 # Progress log (newest first)
 
+## 2026-11-06: Switch test 8f, no suspension while holding a guest lock
+
+- Test 8e: black screen, no logos. [CS] reports: threads 1012 (the -2 server) and 1013 (the CRI file thread)
+  waited 47 s on guest lock 0x00214620, held since 14.5 s by 1010 (the idle thread), taken at 0x000DDFFD in its
+  thread startup; the [GIL] snapshot never showed 1010 queued, so it was stopped (suspended). The main thread ran
+  at 100% (CRI's group 5 wake loop, waiting on the server). Caused by test 8d's check: the idle thread stopped on
+  returning from RtlEnterCriticalSection. Now a cooperative suspension waits until the thread holds no guest
+  critical section (kernel_rtl.c counts them). Pitfall 27.
+- 8e's other change did what it should: the queued priority updates show in the log ("now at priority 15 while
+  queued").
+
 ## 2026-11-06: Switch test 8e, priority changes reach queued threads
 
 - 8c with RECOMP_CRI_EXCL=0 (ct3_env.txt): 2 to 3 fps on the logos, then 0 fps at the Hitmaker logo for good

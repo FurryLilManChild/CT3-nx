@@ -450,9 +450,25 @@ static void crt_lock_trace(const char *what, PRTL_CRITICAL_SECTION guest)
 
 extern RECOMP_TLS uint32_t g_xbox_kernel_caller;
 
+/* CT3-nx: guest critical sections this thread holds (recursion counted).
+ * A cooperative suspension waits until it is 0 (kernel_thread.c). Switch
+ * test 8e: the CRI idle thread was stopped by its first suspension while it
+ * held XAPI's thread-startup lock 0x00214620 (taken at 0x000DDFFD); the two
+ * threads started after it waited on that lock for good, the -2 sound server
+ * among them, and the main thread spun waiting for the server (black
+ * screen). On the Xbox the idle thread, raised to +2 above the main thread,
+ * would have run through its startup before the main thread could suspend it. */
+#ifdef _MSC_VER
+static __declspec(thread) int t_cs_held;
+#else
+static _Thread_local int t_cs_held;
+#endif
+int xbox_thread_guest_cs_held(void) { return t_cs_held; }
+
 static void xbox_cs_note_owner(CRITICAL_SECTION* cs)
 {
     XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
+    t_cs_held++;
     if (!slot)
         return;
     slot->owner_site = g_xbox_kernel_caller;
@@ -463,6 +479,8 @@ static void xbox_cs_note_owner(CRITICAL_SECTION* cs)
 static void xbox_cs_clear_owner(CRITICAL_SECTION* cs)
 {
     XBOX_CS_SLOT* slot = xbox_cs_slot_of(cs);
+    if (t_cs_held > 0)
+        t_cs_held--;
     if (!slot)
         return;
     if (--slot->depth <= 0) {
