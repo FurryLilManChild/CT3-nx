@@ -134,6 +134,14 @@ the rule.
     RtlEnterCriticalSection: the CRI idle thread stopped holding XAPI's thread-startup lock and two other threads
     waited on it for good (test 8e, black screen). Rule: a cooperative stop point must not be inside a guest lock.
 
+28. **The cloud boot test passing does not mean the Switch boots.** 8f reached the title in the cloud and hung on
+    the Switch: a race between threads that depends on how fast a host thread wakes. Rule: tell Mark plainly that
+    the cloud only catches deterministic hangs; timing races still need his Switch.
+
+29. **Include what you call.** kernel_thread.c used getenv without <stdlib.h>; C took it as returning int and
+    cut the pointer, which crashed only when the variable was set. Rule: build changed files with
+    -Werror=implicit-function-declaration (the Linux build shows the warning; read it).
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

@@ -1044,6 +1044,21 @@ void xbox_gil_prio_changed(DWORD tid, int prio)
     LeaveCriticalSection(&s_gil_cs);
 }
 
+/* CT3-nx: is this thread waiting for the guest lock, or holding it? */
+int xbox_gil_thread_ready(DWORD tid)
+{
+    int k, r = 0;
+    EnterCriticalSection(&s_gil_cs);
+    if (s_gil_busy && s_gil_holder_tid == tid)
+        r = 1;
+    for (k = 0; !r && k < s_gil_pw_n; k++)
+        if (s_gil_pw[k].tid == tid && s_gil_pw[k].granted != 2)
+            r = 1;
+    LeaveCriticalSection(&s_gil_cs);
+    return r;
+}
+int xbox_gil_prio_on(void) { return gil_prio_mode(); }
+
 /* Drop this thread's reservation: its kernel call is about to block. */
 void xbox_gil_resv_drop(int why)
 {
@@ -1072,7 +1087,10 @@ static void gil_lock_prio(void)
      * thread's kernel call has it reserved at this priority or above (test 8b:
      * this fast path skipped the reservations, and the sound idle thread (+2)
      * got into a pass of the server (15) during its NtSuspendThread). */
-    if (!s_gil_busy && (s_gil_pw_n == 0 || resv)
+    /* (A thread back from a call takes it only if nobody above it waits: its
+     * priority can have dropped during the call. Switch test 8f: the -2
+     * server lowered itself from 16 and carried on past the main thread.) */
+    if (!s_gil_busy && (s_gil_pw_n == 0 || (resv && !gil_prio_higher_waiting(prio)))
         && !(s_gil_resv_n && (low ? -1000 : prio) <= gil_resv_top())) {
         s_gil_busy = 1;
     } else {

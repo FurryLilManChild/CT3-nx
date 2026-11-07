@@ -1,5 +1,21 @@
 # Progress log (newest first)
 
+## 2026-11-07: Switch test 8g, a resumed higher thread runs first
+
+- Switch test 8f: black screen, though the same build reached the title in the cloud. The [GIL] snapshot: the -2
+  server (1012) held the lock at priority 15 for 30 s, calling job 0x000C5F50 2.6 million times a second; the main
+  thread waited at 0 the whole time. The server's loop (0x000B3480) only suspends itself when its pass returns 0
+  or the wake flag 0x002E00C0 is set, and only the main thread's wake routine (0x000B3360) puts it back to -2. My
+  reading: the main thread resumed the raised server and read the flag before the server had run (on the Xbox it
+  would have switched to the server inside the resume), went round again and raised the server after it had
+  finished, leaving it at 16 with nothing to stop it.
+- Fixes: NtResumeThread waits (up to 10 ms) until a resumed thread above the caller has asked for the guest lock
+  (RECOMP_RESUME_WAIT=0 turns it off); a thread back from a kernel call no longer takes the lock past a higher
+  waiter (its priority can have dropped in the call). kernel_thread.c lacked <stdlib.h>, so getenv's pointer was
+  cut to an int (the cloud run crashed with RECOMP_RESUME_WAIT set).
+- The cloud did not reproduce 8f's hang, on 2 cores or 1, with or without a test wake-up delay
+  (RECOMP_TEST_WAKE_DELAY_US, CLOUD_CPUS in tools/linux/cloud_boot.sh): it boots to the title either way.
+
 ## 2026-11-07: cloud boot test; 8f reaches the title screen there
 
 - Mark: use a cloud boot test until a build reaches the title screen, then send him an NRO. tools/linux/cloud_boot.sh

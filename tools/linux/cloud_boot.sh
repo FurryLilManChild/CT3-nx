@@ -25,6 +25,9 @@ export RECOMP_GL_DUMP=$OUT/f,60
 export SDL_AUDIODRIVER=dummy
 for kv in "$@"; do export "$kv"; done
 cd "$OUT"
-timeout -s INT "$SECS" xvfb-run -a -s "-screen 0 1280x720x24" "$BIN" > "$OUT/boot.log" 2>&1
+# CLOUD_CPUS=0 pins the game to one core: more contention between threads,
+# closer to the timing races the Switch hits (test 8f hung there, not here).
+PIN=""; [ -n "${CLOUD_CPUS:-}" ] && PIN="taskset -c $CLOUD_CPUS"
+timeout -s INT "$SECS" $PIN xvfb-run -a -s "-screen 0 1280x720x24" "$BIN" > "$OUT/boot.log" 2>&1
 echo "exit $? after up to ${SECS}s; $(ls "$OUT"/f*.bmp 2>/dev/null | wc -l) frames dumped"
 grep -E "\[perf\] [0-9.]+ fps|WATCHDOG|CRASH|deadlock" "$OUT/boot.log" | tail -8

@@ -12,6 +12,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>   /* getenv, atol (CT3-nx: undeclared, getenv's pointer was cut to an int) */
 #include "kernel.h"
 #include "xbox_memory_layout.h"   /* XBOX_WORKER_STACK_* + worker-stack decls */
 
@@ -423,6 +424,26 @@ void xbox_kernel_busy(int delta)
  * old path. */
 static volatile LONG g_coop_any;   /* cooperative suspensions outstanding, all threads */
 
+/* CT3-nx, test only: RECOMP_TEST_WAKE_DELAY_US=<n> holds a resumed thread
+ * back n microseconds before it asks for the guest lock again, as a slow
+ * host wake-up would (the cloud boot test, to reproduce Switch test 8f's
+ * hang on a faster machine). Off unless set. */
+static void test_wake_delay(void)
+{
+    static long us = -1;
+    if (us < 0) {
+        const char *e = getenv("RECOMP_TEST_WAKE_DELAY_US");
+        us = e ? atol(e) : 0;
+    }
+    if (us > 0) {
+        LARGE_INTEGER f, t0, t;
+        QueryPerformanceFrequency(&f);
+        QueryPerformanceCounter(&t0);
+        do { SwitchToThread(); QueryPerformanceCounter(&t); }
+        while ((t.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart < us);
+    }
+}
+
 /* CT3-nx: is this thread's cooperative suspension outstanding? */
 int xbox_thread_guest_cs_held(void);   /* kernel_rtl.c */
 
@@ -454,6 +475,7 @@ void xbox_thread_suspend_point(void)
     }
     while (k->coop > 0)
         WaitForSingleObject(k->coop_ev, 5);
+    test_wake_delay();
 }
 
 NTSTATUS __stdcall xbox_NtSuspendThread(
@@ -514,6 +536,7 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
             xbox_gil_resv_drop(5);
         }
         w32_wait_while_suspended(ThreadHandle);
+        test_wake_delay();
         xbox_gil_resume(d);
         if (PreviousSuspendCount)
             *PreviousSuspendCount = (ULONG)prev;
@@ -565,6 +588,38 @@ NTSTATUS __stdcall xbox_NtSuspendThread(
     return STATUS_SUCCESS;
 }
 
+/* CT3-nx: on the Xbox, resuming a thread above the caller's priority
+ * switches to it inside the call. Here the resumed host thread wakes some
+ * time later, and the caller ran on meanwhile. Switch test 8f: CRI's "run the
+ * -2 server now" (0x000B3360) resumes the raised server and then reads a
+ * flag the server clears; it read it before the server had run, went round
+ * again and raised the server once more after the server had finished and
+ * lowered itself, which left the server at 16 looping and the main thread
+ * out for good. So wait (up to 10 ms) until the resumed thread has asked for
+ * the guest lock; the caller then queues behind it on return. */
+extern int xbox_gil_thread_ready(DWORD tid);
+extern int xbox_gil_prio_on(void);
+static void resume_wait_ready(HANDLE h, DWORD tid, DWORD prev)
+{
+    LARGE_INTEGER f, t0, t;
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("RECOMP_RESUME_WAIT"); on = !(e && *e == '0'); }
+    if (!on || prev != 1 || !tid || !xbox_gil_prio_on())
+        return;
+    if (GetThreadPriority(h) <= GetThreadPriority(GetCurrentThread()))
+        return;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t0);
+    for (;;) {
+        if (xbox_gil_thread_ready(tid))
+            return;
+        QueryPerformanceCounter(&t);
+        if (t.QuadPart - t0.QuadPart > f.QuadPart / 100)
+            return;
+        SwitchToThread();
+    }
+}
+
 NTSTATUS __stdcall xbox_NtResumeThread(
     HANDLE ThreadHandle,
     PULONG PreviousSuspendCount)
@@ -581,6 +636,7 @@ NTSTATUS __stdcall xbox_NtResumeThread(
             SetEvent(k->coop_ev);
         if (PreviousSuspendCount)
             *PreviousSuspendCount = (ULONG)prev;
+        resume_wait_ready(ThreadHandle, tid, prev);
         return STATUS_SUCCESS;
     }
 
@@ -616,6 +672,7 @@ NTSTATUS __stdcall xbox_NtResumeThread(
     xbox_log(XBOX_LOG_DEBUG, XBOX_LOG_THREAD,
         "NtResumeThread: thread=%p previous_count=%u", ThreadHandle, prev);
 
+    resume_wait_ready(ThreadHandle, tid, prev);
     return STATUS_SUCCESS;
 }
 
