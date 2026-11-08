@@ -451,9 +451,25 @@ void nv2a_pb_set_semaphore_target(uint32_t guest_va) { s_sem_va = guest_va; }
  * second, so no search. The report sorts s_unhandled and rebuilds it. */
 static uint16_t s_unhandled_slot[0x2000 / 4];
 
+static int unhandled_on(void)
+{
+    /* CT3-nx: the tally is a bring-up aid. A 2-minute Switch profile of a
+     * shift (test 8i) put 2.8% of the graphics thread here: tens of
+     * millions of state methods a minute that are stored in the register
+     * file and need no handler of their own. Off unless
+     * RECOMP_PB_UNHANDLED=1 (or RECOMP_PB_UNHANDLED_ALL). */
+    static int on = -1;
+    if (on < 0)
+        on = getenv("RECOMP_PB_UNHANDLED") != NULL || getenv("RECOMP_PB_UNHANDLED_ALL") != NULL;
+    return on;
+}
+
 static void note_unhandled(uint32_t method, uint32_t param)
 {
     uint16_t *slot = &s_unhandled_slot[(method & 0x1FFC) / 4];
+
+    if (!unhandled_on())
+        return;
 
     s_gpu.unhandled_total++;
     if (*slot) {
@@ -3326,6 +3342,10 @@ static uint16_t raw_direct_attrs(Nv2aRawBatch *rb, uint16_t present,
         case 2: elem = 4 * va->size; break;
         case 4: elem = va->size; break;
         case 1: case 5: elem = 2 * va->size; break;
+        case 6:                         /* CT3-nx: CMP normal, unpacked by the back end */
+            if (va->size != 1 || !(s_backend->flags & NV2A_BACKEND_RAW_CMP)) continue;
+            elem = 4;
+            break;
         default: continue;
         }
         first = (size_t)va->offset + (size_t)lo * va->stride;
@@ -3351,6 +3371,41 @@ static uint16_t raw_direct_attrs(Nv2aRawBatch *rb, uint16_t present,
 static void attr_const_init(void);
 
 void (*nv2a_raw_batch_hook)(Nv2aRawBatch *rb, float *attrs);
+
+/* CT3-nx: CPU time per draw on this thread (raw_batch: gathering,
+ * conversion and the back end's draw), every 10 s: "[DRAWCOST]". The
+ * thread's own CPU clock where there is one (Linux: the cloud boot test,
+ * where the software GPU competes for the cores), wall time on the Switch,
+ * where this thread has a core to itself. */
+static uint64_t s_dc_t0, s_dc_sum, s_dc_n, s_dc_next;
+static uint64_t dc_now_ns(void)
+{
+#if defined(__linux__)
+    struct timespec ts;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+#else
+    LARGE_INTEGER c, f;
+    QueryPerformanceCounter(&c);
+    QueryPerformanceFrequency(&f);
+    return (uint64_t)((double)c.QuadPart * 1e9 / (double)f.QuadPart);
+#endif
+}
+static void draw_cost_begin(void) { s_dc_t0 = dc_now_ns(); }
+static void draw_cost_end(void)
+{
+    uint64_t now = GetTickCount64();
+    s_dc_sum += dc_now_ns() - s_dc_t0;
+    s_dc_n++;
+    if (now >= s_dc_next) {
+        if (s_dc_next && s_dc_n)
+            fprintf(stderr, "[DRAWCOST] 10 s: %llu draws, %.1f us of CPU each, %.1f ms in all\n",
+                    (unsigned long long)s_dc_n, (double)s_dc_sum / (double)s_dc_n / 1000.0,
+                    (double)s_dc_sum / 1e6);
+        s_dc_sum = s_dc_n = 0;
+        s_dc_next = now + 10000;
+    }
+}
 
 static void raw_batch(void)
 {
@@ -3396,6 +3451,28 @@ static void raw_batch(void)
          * normals, arrays that run off their buffer). Most batches have
          * nothing left here. */
         uint16_t conv = present & (uint16_t)~direct;
+        {   /* CT3-nx: what the CPU converts, by type and size, every 10 s */
+            static uint64_t vtx[8][5], draws, cdraws, tot, next;
+            uint64_t now = GetTickCount64();
+            draws++;
+            tot += nv;
+            if (conv) cdraws++;
+            for (a = 0; a < NV2A_RAW_ATTRS; a++)
+                if (conv & (1u << a))
+                    vtx[s_gpu.attr[a].type & 7][s_gpu.attr[a].size <= 4 ? s_gpu.attr[a].size : 0] += nv;
+            if (now >= next) {
+                if (next) {
+                    int t, z;
+                    fprintf(stderr, "[VSTAT] 10 s: %llu draws (%llu with CPU-converted attributes), %llu vertices;"
+                            " converted (type/size: vertices):", (unsigned long long)draws,
+                            (unsigned long long)cdraws, (unsigned long long)tot);
+                    for (t = 0; t < 8; t++) for (z = 0; z < 5; z++)
+                        if (vtx[t][z]) fprintf(stderr, " %d/%d: %llu", t, z, (unsigned long long)vtx[t][z]);
+                    fprintf(stderr, "\n");
+                }
+                memset(vtx, 0, sizeof vtx); draws = cdraws = tot = 0; next = now + 10000;
+            }
+        }
         for (a = 0; conv && a < NV2A_RAW_ATTRS; a++) {
             if (!(conv & (1u << a)))
                 continue;
@@ -3722,7 +3799,9 @@ static void raster_batch(void)
     if (s_gpu.idx_count < 3)
         return;
     if (s_backend && s_backend->draw_raw) {
+        draw_cost_begin();
         raw_batch();
+        draw_cost_end();
         return;
     }
     if (!batch_is_screen_space()) {

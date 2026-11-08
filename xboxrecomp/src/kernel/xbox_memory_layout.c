@@ -1219,6 +1219,12 @@ static DWORD WINAPI nv2a_flag_thread(LPVOID param)
 static DWORD WINAPI nv2a_ack_thread(LPVOID param)
 {
     volatile uint32_t *regs = (volatile uint32_t *)param;
+#if defined(__linux__)
+    {   /* CT3-nx: named for the cloud boot test's per-thread CPU report */
+        extern int pthread_setname_np(pthread_t, const char *);
+        pthread_setname_np(pthread_self(), "nv2a_exec");
+    }
+#endif
     while (!InterlockedCompareExchange(&g_nv2a_ack_stop, 0, 0)) {
         nv2a_ack_flags(regs);
         {

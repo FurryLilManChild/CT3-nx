@@ -234,6 +234,9 @@ void nv2a_pb_write_report(uint32_t va, uint32_t pixels);
 /* draw_raw takes attributes in their stored format (Nv2aRawBatch.attr_direct).
  * RECOMP_GL_DIRECT=0 turns it off at run time. */
 #define NV2A_BACKEND_RAW_DIRECT 0x1u
+/* CT3-nx: draw_raw also takes type-6 (CMP, packed 11:11:10) attributes as
+ * stored, and unpacks them on the GPU. */
+#define NV2A_BACKEND_RAW_CMP 0x2u
 
 /* Optional, set by the game project: sees every raw batch just before the
  * back end gets it and may change it. attrs is rb->attrs, writable; an

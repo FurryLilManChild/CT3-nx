@@ -1554,11 +1554,80 @@ static VkPipelineCache       s_pcache;
 typedef struct {
     uint64_t   vkey;
     Nv2aPshKey pkey;
+    uint16_t   cmp;          /* CT3-nx: attributes read as packed CMP normals (cmp_mask) */
     VkShaderModule vs, fs;
     uint32_t   used;
     uint32_t   hash;
     int        next;
 } VkProg;
+
+/* CT3-nx: NV2A "CMP" attributes (type 6: a normal packed 11:11:10 into one
+ * dword) are fetched by the GPU as one uint and unpacked in the vertex
+ * shader. Before, the CPU unpacked every one into a float4 and copied it
+ * again: a 2-minute Switch profile of a shift (test 8i) put about 22% of the
+ * graphics thread there, and a cloud count found the CMP normal on 99% of
+ * draws (about 8 million vertices each 10 s). Vulkan has no vertex format
+ * for 11:11:10 signed, so the shader gets the dword as R32_UINT.
+ * RECOMP_VK_CMP=0 goes back to the CPU. */
+static int cmp_gpu_on(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("RECOMP_VK_CMP");
+        on = !(e && *e == '0');
+    }
+    return on;
+}
+
+static int cmp_direct(const Nv2aRawBatch *b, uint32_t a)
+{
+    if (!cmp_gpu_on() || !(b->attr_direct & (1u << a)) || b->direct[a].type != 6 || b->direct[a].size != 1)
+        return 0;
+    return !((uintptr_t)b->direct[a].ptr & 3) && !(b->direct[a].stride & 3);
+}
+
+static uint16_t cmp_mask(const Nv2aRawBatch *b)
+{
+    uint16_t m = 0;
+    uint32_t a;
+    for (a = 0; a < NV2A_RAW_ATTRS; a++)
+        if (cmp_direct(b, a))
+            m |= (uint16_t)(1u << a);
+    return m;
+}
+
+/* Rewrite the vertex shader's inputs for the CMP attributes in `m`. */
+static int cmp_patch_vs(char *src, size_t cap, uint16_t m)
+{
+    char tmp[64], rep_[160], init[1024];
+    size_t ni = 0, len = strlen(src);
+    uint32_t a;
+    char *at;
+    init[0] = 0;
+    for (a = 0; a < 16; a++) {
+        if (!(m & (1u << a)))
+            continue;
+        snprintf(tmp, sizeof tmp, "layout(location = %u) in vec4 v%u;\n", a, a);
+        snprintf(rep_, sizeof rep_, "layout(location = %u) in uint v%u_cmp;\nvec4 v%u;\n", a, a, a);
+        at = strstr(src, tmp);
+        if (!at || len + strlen(rep_) - strlen(tmp) + 1 > cap)
+            return -1;
+        memmove(at + strlen(rep_), at + strlen(tmp), len - (size_t)(at - src) - strlen(tmp) + 1);
+        memcpy(at, rep_, strlen(rep_));
+        len += strlen(rep_) - strlen(tmp);
+        ni += (size_t)snprintf(init + ni, sizeof init - ni,
+            "    v%u = vec4(float(bitfieldExtract(int(v%u_cmp), 0, 11)) / 1023.0,"
+            " float(bitfieldExtract(int(v%u_cmp), 11, 11)) / 1023.0,"
+            " float(bitfieldExtract(int(v%u_cmp), 22, 10)) / 511.0, 1.0);\n", a, a, a, a);
+    }
+    at = strstr(src, "void main() {\n");
+    if (!at || len + ni + 1 > cap)
+        return -1;
+    at += strlen("void main() {\n");
+    memmove(at + ni, at, len - (size_t)(at - src) + 1);
+    memcpy(at, init, ni);
+    return 0;
+}
 
 #define VK_MAX_PROG 1024
 #define PROG_BUCKETS 1024
@@ -1880,14 +1949,15 @@ static VkProg *prog_get(const Nv2aRawBatch *b, const Nv2aPshKey *pk)
         }
         vkey = last_vkey;
     }
-    if (last && last->vs && last->vkey == vkey && !memcmp(&last->pkey, pk, sizeof *pk)) {
+    uint16_t cmp = cmp_mask(b);
+    if (last && last->vs && last->vkey == vkey && last->cmp == cmp && !memcmp(&last->pkey, pk, sizeof *pk)) {
         last->used = s_frame;
         return last;
     }
     bucket = prog_bucket(vkey, pk);
     for (i = s_prog_head[bucket]; i; i = s_prog[i - 1].next) {
         VkProg *c = &s_prog[i - 1];
-        if (c->vs && c->vkey == vkey && !memcmp(&c->pkey, pk, sizeof *pk)) {
+        if (c->vs && c->vkey == vkey && c->cmp == cmp && !memcmp(&c->pkey, pk, sizeof *pk)) {
             c->used = s_frame;
             last = c;
             return c;
@@ -1923,6 +1993,17 @@ static VkProg *prog_get(const Nv2aRawBatch *b, const Nv2aPshKey *pk)
     } else {
         snprintf(vsrc + n, sizeof vsrc - n, "%s", nv2a_gl_vsh_fixed());
     }
+    if (cmp) {
+        static int shown;
+        if (shown++ < 3)
+            fprintf(stderr, "  [VK] CMP normals (attributes %04X) unpacked by the vertex shader\n", cmp);
+    }
+    if (cmp && cmp_patch_vs(vsrc, sizeof vsrc, cmp) < 0) {
+        static int shown;
+        if (shown++ < 4)
+            LOGE("CMP inputs: could not rewrite the vertex shader\n");
+        return NULL;
+    }
     if (nv2a_gl_psh(pk, fsrc, sizeof fsrc) < 0)
         return NULL;
     p->vs = compile(GLSLANG_STAGE_VERTEX, vsrc);
@@ -1937,6 +2018,7 @@ static VkProg *prog_get(const Nv2aRawBatch *b, const Nv2aPshKey *pk)
     if ((++s_prog_made % 100) == 0)
         LOGE("%u shader programs compiled (%u live)\n", s_prog_made, s_prog_live);
     p->vkey = vkey;
+    p->cmp = cmp;
     p->pkey = *pk;
     p->used = s_frame;
     p->hash = bucket;
@@ -2880,6 +2962,7 @@ static uint32_t elem_bytes(uint32_t type, uint32_t size)
     case 0: return 4;
     case 2: return 4 * size;
     case 4: return size;
+    case 6: return 4;                   /* CT3-nx: CMP, one dword */
     default: return 2 * size;
     }
 }
@@ -2992,6 +3075,14 @@ static void attr_to_float4(const Nv2aRawBatch *b, uint32_t a, uint32_t v, float 
     case 4:
         for (c = 0; c < size && c < 4; c++) out[c] = p[c] / 255.0f;
         break;
+    case 6: {                                        /* CT3-nx: CMP, packed 11:11:10 normal */
+        int32_t v;
+        memcpy(&v, p, 4);
+        out[0] = (float)((int32_t)((uint32_t)v << 21) >> 21) / 1023.0f;
+        out[1] = (float)((int32_t)((uint32_t)v << 10) >> 21) / 1023.0f;
+        out[2] = (float)(v >> 22) / 511.0f;
+        break;
+    }
     default:
         for (c = 0; c < size && c < 4; c++) { int16_t s; memcpy(&s, p + 2 * c, 2); out[c] = (float)s; }
         break;
@@ -3021,6 +3112,11 @@ static int upload_vertices(const Nv2aRawBatch *b)
         if (!(b->attr_direct & (1u << a)))
             continue;
         fmt[a] = vertex_format(b->direct[a].type, b->direct[a].size);
+        if (cmp_direct(b, a)) {             /* CT3-nx: unpacked by the shader (cmp_mask) */
+            fmt[a] = VK_FORMAT_R32_UINT;
+            direct |= (uint16_t)(1u << a);
+            continue;
+        }
         {   /* CT3-nx: Vulkan fetches a vertex attribute only from an
              * address that is a multiple of its component size; GPUs round a
              * misaligned one down (AMD) and read the wrong bytes. Sonic
@@ -4602,7 +4698,7 @@ static const Nv2aBackend s_backend = {
     vk_draw,
     vk_flip,
     vk_draw_raw,
-    NV2A_BACKEND_RAW_DIRECT,
+    NV2A_BACKEND_RAW_DIRECT | NV2A_BACKEND_RAW_CMP,
     vk_report,
     vk_blit,
 };

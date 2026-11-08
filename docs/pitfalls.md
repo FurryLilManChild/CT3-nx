@@ -142,6 +142,10 @@ the rule.
     cut the pointer, which crashed only when the variable was set. Rule: build changed files with
     -Werror=implicit-function-declaration (the Linux build shows the warning; read it).
 
+30. **Read the code before describing it to Mark.** I told him regs_changed compared all 2,048 GPU registers on
+    every draw; it already skips unchanged 64-byte blocks. Rule: name a cost from the profile and the code, not
+    from the function's name.
+
 ## Working with Mark
 
 20. **Confirm a new route works before telling Mark to drop the old one.** Switch toolchain: I asked for a

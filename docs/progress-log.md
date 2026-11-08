@@ -1,5 +1,22 @@
 # Progress log (newest first)
 
+## 2026-11-07: Switch test 9a, first speed round (CMP normals on the GPU)
+
+- 8i: shifts load every time (2 loads, 1 quit, no crash); about 20 to 30 fps in a shift. Profile (tools/prof_report.py,
+  prof.bin, 2 minutes in a shift): the graphics thread (nv2a_ack_thread) is the bottleneck, busy about 72% (28%
+  in FLIP_STALL, nv2a_pb_exec.c:5073: frames of about 32 ms of work miss a vblank and take 50 ms); the main thread
+  waits about 40% of the time for it (KeWaitForSingleObject). NVK is only about 5 to 8%. Our translation: vertex
+  conversion and copies about 22% of samples (fetch_attr 8.7%, upload_vertices 6.7%, memmove 4%), vk_draw_raw's own
+  work 6.9% (per-draw uniform blocks), method parsing about 14%, the unhandled-method tally 2.8%, regs_changed 2.3%
+  (already dirty-tracked by block; my first report said it compared all 2,048 registers, wrongly).
+- A cloud count (the [VSTAT] line): the CMP normal (type 6, packed 11:11:10) is on 99% of draws, about 8 million
+  vertices each 10 s, and was converted to float4 on the CPU and copied again.
+- 9a: CMP attributes go to the GPU as R32_UINT and the vertex shader unpacks them (nv2a_vk.c cmp_mask,
+  cmp_patch_vs; NV2A_BACKEND_RAW_CMP; RECOMP_VK_CMP=0 for the CPU); the unhandled-method tally is off unless
+  RECOMP_PB_UNHANDLED=1. New: [DRAWCOST] every 10 s, CPU (wall on the Switch) per draw in raw_batch.
+- Cloud: CPU and GPU decoding give identical pixels on the same frame. Cloud per-draw CPU barely moved (6.2 to 6.0
+  us), but x86 converts cheaply; the Switch profile is the real measure.
+
 ## 2026-11-07: Switch test 8i, re-initializing a held lock releases it
 
 - Switch 8h: first shift loaded (handover worked: "given to waiting thread 1015"); about 21 to 29 fps in the shift;
