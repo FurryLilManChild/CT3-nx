@@ -128,6 +128,7 @@ static PFN_vkCmdSetDepthWriteEnable   p_depth_write;
 static PFN_vkCmdSetDepthCompareOp     p_depth_op;
 static PFN_vkCmdSetStencilTestEnable  p_stencil_test;
 static PFN_vkCmdSetStencilOp          p_stencil_op;
+#include "nv2a_vk_rec.h"                  /* CT3-nx: recording on its own thread */
 
 /* Presentation. */
 static VkSurfaceKHR   s_surface;
@@ -3765,14 +3766,19 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
          * 2.2% of the graphics thread). */
         static float clast[VK_CONST_SIZE / 4];
         static VkDeviceSize clast_at;
-        static uint32_t clast_gen = ~0u;
+        static uint32_t clast_gen = ~0u, clast_cgen;
         static int creuse = -1;
         VkDeviceSize cat, range;
         if (creuse < 0) { const char *e = getenv("RECOMP_VK_UBO_REUSE"); creuse = !(e && *e == '0'); }
-        if (creuse && clast_gen == s_cb_gen && !pend_eligible(b) && !memcmp(b->vp_consts, clast, VK_CONST_SIZE)) {
+        /* (the executor's const_gen moves on every constant write, so an
+         * unchanged one skips even the compare) */
+        if (creuse && clast_gen == s_cb_gen && !pend_eligible(b)
+            && (b->vp_const_gen == clast_cgen || !memcmp(b->vp_consts, clast, VK_CONST_SIZE))) {
             cat = clast_at;
+            clast_cgen = b->vp_const_gen;
             s_st_ubo_reused++;
         } else {
+            clast_cgen = b->vp_const_gen;
             cat = ring_alloc(VK_CONST_SIZE, s_ubo_align, &map);
             if (!map) return;
             memcpy(map, b->vp_consts, VK_CONST_SIZE);
@@ -4413,6 +4419,13 @@ static void vk_flip(void)
                     s_st_draws / (s_frame - st_frame), s_st_calls / (s_frame - st_frame),
                     s_st_ubo_reused / (s_frame - st_frame), s_st_push_skipped / (s_frame - st_frame));
             s_st_draws = s_st_calls = s_st_inst = s_st_ubo_reused = s_st_push_skipped = 0;
+            if (s_qr_on > 0) {
+                fprintf(stderr, "[vk] recording thread: %llu commands a frame, the renderer waited %.2f ms a frame for it (%llu waits), queue full %llu times\n",
+                        (unsigned long long)(s_qr_cmds / (s_frame - st_frame)),
+                        s_qr_sync_ns / 1e6 / (s_frame - st_frame),
+                        (unsigned long long)s_qr_syncs, (unsigned long long)s_qr_full);
+                s_qr_cmds = s_qr_syncs = s_qr_sync_ns = s_qr_full = 0;
+            }
             st_frame = s_frame;
         }
         if (st && s_frame - st_frame >= 300) {
