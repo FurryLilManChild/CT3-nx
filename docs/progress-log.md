@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-08: Switch test 10a results (light setup memo)
+
+- Looks right (Mark). Speed unchanged to the eye: 30 to 36 fps in a shift, 55 to 61 in menus.
+- The 30.0 readings are vsync: the game waits for vblank itself every frame (sub_000A72F0 calls 0x000F5250, D3D's
+  BlockUntilVerticalBlank, a KeWaitForSingleObject on dev+0x2448), so a frame that misses 16.7 ms waits for the
+  next one. Gains do not show on the counter until both threads fit in 16.7 ms.
+- Profile, per 33 ms frame. Main thread: about 19 ms busy (game code 8.6 ms, D3D 4.3 ms, the light memo 2.7 ms,
+  host 1.6 ms of which TLS reads 0.7 ms), the rest waiting for vblank. Graphics thread: about 22 ms busy
+  (draws 13 us each, about 1,150 draws a frame; pushbuffer parse about 7 ms), the rest in trap and flip waits.
+- The memo saved well under 1 ms: its key costs 8.2% of the main thread against about 10% for the original
+  (pitfall 33). 81% of calls still reuse a result, 0 mismatches.
+- Menu quit and restart loop: no hang since 8i (Mark); dropped from the test steps for now (Mark: performance first).
+
 ## 2026-11-08: Direct3D path, step 1: the light setup memoised (Switch test 10a)
 
 - Cloud pushbuffer census (RECOMP_PB_SCAN=1, a shift): the light registers 0x1000-0x10BC about 26% of all words

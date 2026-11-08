@@ -173,3 +173,10 @@ the rule.
     Linux build declares there), but the chained commands after it ran anyway: they listed the old NRO and
     copied the old ELF as out/elf/ct3_10a.elf. Rule: chain the steps after a build with `&&`, and compare the
     NRO's time with the build's start before delivering it.
+
+33. **Measure what a cache costs, not just how often it hits.** (Switch test 10a, 2026-11-08.) The light setup
+    memo was checked in the cloud for hits (81%) and exactness (0 mismatches), and I expected 1 to 2 ms a frame
+    from it. On the Switch, building and hashing its key (up to about 1 KB read word by word through the
+    MMIO-checked accessor, then hashed byte by byte) cost 8.2% of the main thread against about 10% for the
+    original light setup: well under 1 ms saved. Rule: before promising a gain from a cache, time the lookup
+    itself against the work it replaces.
