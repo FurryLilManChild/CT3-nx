@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-08: Switch 9a results and the Direct3D survey
+
+- 9a in a shift: 25.8 to 35 fps (about 31 on average) against 20.7 to 30 (about 25) for 8i; 50 ms frames 260 to 36.
+  fetch_attr gone from the profile. Graphics thread about 23 ms of work per frame, main thread about 19 ms.
+- Survey (read-only): 59 D3D entry points are called from outside the D3D section. No pushbuffer subroutine calls in
+  a whole cloud shift ([PBCALL] counter in nv2a_pb_scan.c): no RunPushBuffer. The costliest D3D path on the main
+  thread is the lazy state flush 0x000FE7D0 (via the per-draw wrapper 0x000F9630, 13.5% of main-thread samples),
+  10% of it in 0x000FE210, the fixed-function light setup (vector x matrix 0x000F9770, normalise 0x000F9A60,
+  colours 0x000FDF30 / 0x000FDE30), in x87 code. 1,314 lifted functions use the x87 stack; they hold 29.8% of
+  the main thread's samples (waits 39.6%, other guest code 22.8%, runtime 7.8%).
+- The lifter keeps the x87 stack in memory (g_fp_stack[(top + i) & 7]) and every operation goes through
+  RECOMP_FP_PC, which reads the control word (thread-local) and may call recomp_fp_round24.
+
 ## 2026-11-07: Switch test 9a, first speed round (CMP normals on the GPU)
 
 - 8i: shifts load every time (2 loads, 1 quit, no crash); about 20 to 30 fps in a shift. Profile (tools/prof_report.py,

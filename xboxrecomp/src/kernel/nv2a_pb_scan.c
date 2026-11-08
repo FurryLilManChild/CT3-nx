@@ -294,6 +294,19 @@ void nv2a_pb_scan(uint32_t put_phys)
         if ((w & 3u) == 2u) {                            /* call */
             target = w & 0xFFFFFFFCu;
             if (pb_bad_target(w, at, target, put)) { s_get = put; break; }
+            {   /* CT3-nx: pre-recorded pushbuffers (RunPushBuffer) show as
+                 * calls; counted every 10 s ([PBCALL]) for the Direct3D survey */
+                static uint32_t n, last_t; static uint64_t next;
+                static uint32_t tgt[8]; static uint32_t tn;
+                uint64_t now = GetTickCount64();
+                n++;
+                if (tn < 8) { uint32_t q; for (q = 0; q < tn && tgt[q] != target; q++) {} if (q == tn) tgt[tn++] = target; }
+                if (now >= next) {
+                    if (next) fprintf(stderr, "[PBCALL] 10 s: %u subroutine calls in the pushbuffer (first targets %08X %08X %08X %08X)\n",
+                                      n, tgt[0], tgt[1], tgt[2], tgt[3]);
+                    n = 0; next = now + 10000; (void)last_t;
+                }
+            }
             s_ret = s_get;
             s_in_call = 1;
             pb_flow(at, w, target);
