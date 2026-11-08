@@ -344,6 +344,10 @@ extern RECOMP_TLS int g_df;
    and the FNSTSW that reads it can land in different bodies, and the control
    word has to survive a call. (g_fp_stack/g_fp_top are declared above.) */
 extern RECOMP_TLS uint16_t g_fp_control_word;
+/* CT3-nx: the lifter's per-function copy of it (translator.py,
+ * _localize_x87_stack) loads and stores through these. */
+static inline uint16_t recomp_fpcw_ld(void) { return g_fp_control_word; }
+static inline void recomp_fpcw_st(uint16_t cw) { g_fp_control_word = cw; }
 extern RECOMP_TLS int g_fp_cmp;
 extern RECOMP_TLS uint16_t g_fp_cc;
 /* x87 precision control (control word bits 8-9). The stack is double-backed,

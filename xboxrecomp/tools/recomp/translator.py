@@ -392,6 +392,19 @@ def _localize_x87_stack(lines):
     out = lines[:at + 1]
     out.append("    double *const g_fp_stack = recomp_fp_base(); "
                "int g_fp_top = recomp_fp_top_ld(); /* x87 top in a local */")
+    # CT3-nx: the control word too. RECOMP_FP_PC reads it on every x87
+    # operation, and it is thread-local: on the Switch a __aarch64_read_tp
+    # call per fadd/fmul (2.9% of Crazy Taxi 3's main thread was that
+    # function alone). It is read once here and after each call (a callee may
+    # fldcw); a function that writes it (fldcw) stores it back before calls
+    # and returns. RECOMP_X87_CW_LOCAL=0 at regen keeps the global.
+    import os
+    if (os.environ.get("RECOMP_X87_CW_LOCAL", "1") != "0"
+            and re.search(r"\bg_fp_control_word\b|\bRECOMP_FP_PC\b", text)):
+        out.append("    uint16_t g_fp_control_word = recomp_fpcw_ld(); /* x87 control word in a local */")
+        reload += " g_fp_control_word = recomp_fpcw_ld();"
+        if re.search(r"\bg_fp_control_word\s*=[^=]", text):
+            spill = "recomp_fpcw_st(g_fp_control_word); " + spill
     for l in body:
         out.append(_wrap_calls(l, _X87_CALL_RE, spill, reload))
     # Control that runs off the end returns too (steps after this one add

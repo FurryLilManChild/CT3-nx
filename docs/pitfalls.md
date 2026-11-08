@@ -158,3 +158,12 @@ the rule.
 12. **Scope global renames.** Kickoff: a global "Sonic Heroes" to "Crazy Taxi 3" replace in CLAUDE.md also
     rewrote the lines saying where the repo came from. Rule: rename paths and identifiers only, then read the
     diff.
+
+31. **Keep asking whether we are still doing native static recompilation.** (Mark, 2026-11-08.) The goal is code
+    that runs natively on the Switch, not an emulation of the Xbox doing the work. Along the way, ask again and
+    again: are we doing this because upstream (burnout3-sw, xboxrecomp) does it, and is that keeping us from the
+    speed we need? Are we off the path of true native recompilation? Here the renderer read back the Xbox GPU
+    command stream the game had just written (upstream's design), the x87 maths ran through an in-memory stack
+    and a per-operation precision check, and it took a profile and Mark's push to look at either. Upstream
+    informs and is there to leverage; we choose the best path for each project.
+
