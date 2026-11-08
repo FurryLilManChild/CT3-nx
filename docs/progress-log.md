@@ -1,5 +1,21 @@
 # Progress log (newest first)
 
+## 2026-11-08: Switch test 10b results; test 10c (Vulkan recording on its own thread)
+
+- 10b on the Switch (Mark: noticeable improvements): a shift at 30 to 47 fps (10a: 30 to 36). Graphics thread:
+  pushbuffer reading about 7 to 3.6 ms a frame, a draw 13.3 to 11.3 us. Main thread: the light memo about 8.2% to
+  4%. Heaviest scenes per frame: main about 17.4 ms, graphics about 19.4 ms; lighter scenes now fit in 16.7 ms.
+- Graphics thread busy time by kind (10b profile): our draw preparation 36%, the pushbuffer reader 13%, the Vulkan
+  driver 16% (of the thread's samples; 35% waits). No single piece above about 2 us of a draw's 15 us.
+- 10c: every vkCmd* goes through a queue to a recording thread (xboxrecomp/src/nv2a_vk/nv2a_vk_rec.h; arguments
+  and arrays copied; begin, end, submit, present, fence waits, destroy and free wait for the queue to empty).
+  Cloud: about 4,300 commands a frame, the renderer waits about 0.3 ms a frame. Cloud fps the same with and without
+  it (about 10.7 in a shift on lavapipe, 2 cores); a first comparison against an older run (12.5) was run-to-run
+  noise. The recorder sleeps and is woken per 48 commands (RECOMP_VK_RECORD_SPIN, _BATCH).
+- Constants: the 3 KB compare is skipped when the executor's const_gen has not moved.
+- Not done: the native matrix inverse (0x000E4FB7, x87, 909 bytes); TLS register access (-mtp=el0 would need
+  TPIDR_EL0 set on every thread that runs guest code).
+
 ## 2026-11-08: Switch test 10b (graphics and main thread costs from the 10a profile)
 
 - Graphics thread: plain-register runs stored in one go (cloud check over a shift, RECOMP_PB_BULK=2: 0 words not
