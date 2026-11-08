@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-08: Switch test 10b (graphics and main thread costs from the 10a profile)
+
+- Graphics thread: plain-register runs stored in one go (cloud check over a shift, RECOMP_PB_BULK=2: 0 words not
+  plain; about 5 to 6 million words per 10 s now skip the dispatcher). Uniform blocks (VsBlock about 2 KB, FsBlock)
+  built in cached memory and copied to the uncached ring only when changed; the 3 KB constants block reused for
+  draws that take no repeats; the descriptor set not pushed again when unchanged. Cloud: 83% of uniform blocks
+  reused, frames look the same. regs_changed skips clean blocks eight at a time.
+- Main thread: the light memo key copied in runs and hashed 8 bytes at a time (0 mismatches). XGVec4Transform
+  (0x000E4E73) and XGMatrixMultiply (0x000E4EB9) in native code (cloud RECOMP_NATIVE_MATH=2: 11.5 million
+  results, 0 different). Regen (LIFT_ONLY) for the two overrides.
+- Expected (estimates from the 10a profile, to be measured): main about 19 to 16 ms, graphics about 22 to 17 ms.
+
 ## 2026-11-08: Switch test 10a results (light setup memo)
 
 - Looks right (Mark). Speed unchanged to the eye: 30 to 36 fps in a shift, 55 to 61 in menus.
