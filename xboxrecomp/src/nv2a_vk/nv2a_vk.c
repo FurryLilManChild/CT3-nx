@@ -3286,6 +3286,11 @@ static int regs_changed(const uint32_t *r)
     int changed = 0;
 
     for (blk = 0; blk < 0x2000 / 64; blk++) {
+        if ((blk & 7) == 0) {               /* CT3-nx: eight clean blocks at once */
+            uint64_t d8;
+            memcpy(&d8, dirty + blk, 8);
+            if (!d8) { blk += 7; continue; }
+        }
         if (!dirty[blk])
             continue;
         dirty[blk] = 0;
@@ -3322,6 +3327,8 @@ static struct {
 } s_pend;
 static int s_inst_on = -1, s_inst_alt;
 static uint32_t s_st_draws, s_st_calls, s_st_inst;
+static uint32_t s_st_ubo_reused;           /* CT3-nx: uniform blocks not copied again */
+static uint32_t s_st_push_skipped, s_push_other;   /* CT3-nx: descriptor sets not pushed again */
 
 static void pend_flush(void)
 {
@@ -3560,11 +3567,22 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
 
     /* Uniforms. */
     {
-        VsBlock *vb;
-        FsBlock *fb;
-        VkDeviceSize vat = ring_alloc(sizeof(VsBlock), s_ubo_align, &map);
-        vb = (VsBlock *)map;
-        if (!vb) return;
+        /* CT3-nx: both blocks are built here in cached memory, then go
+         * to the ring in one copy, or not at all when they match the last
+         * draw's in this command buffer (whose copy is still there).
+         * Switch test 10a: building them float by float straight into the
+         * ring (host-visible, uncached) was about a third of vk_draw_raw's
+         * own time. RECOMP_VK_UBO_REUSE=0: a copy for every draw. */
+        static VsBlock vbl, vlast;
+        static FsBlock fbl, flast;
+        static VkDeviceSize vlast_at, flast_at;
+        static uint32_t vlast_gen = ~0u, flast_gen = ~0u;
+        static int reuse = -1;
+        VsBlock *vb = &vbl;
+        FsBlock *fb = &fbl;
+        VkDeviceSize vat;
+        if (reuse < 0) { const char *e = getenv("RECOMP_VK_UBO_REUSE"); reuse = !(e && *e == '0'); }
+        memset(vb, 0, sizeof *vb);
         vb->surf[0] = 2.0f / (float)s->w;
         vb->surf[1] = 2.0f / (float)s->h;
         vb->surf[2] = 1.0f / (float)zmax_of(r);
@@ -3672,14 +3690,21 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
                 }
             }
         }
+        if (reuse && vlast_gen == s_cb_gen && !memcmp(vb, &vlast, sizeof *vb)) {
+            vat = vlast_at;
+            s_st_ubo_reused++;
+        } else {
+            vat = ring_alloc(sizeof(VsBlock), s_ubo_align, &map);
+            if (!map) return;
+            memcpy(map, vb, sizeof *vb);
+            vlast = *vb; vlast_at = vat; vlast_gen = s_cb_gen;
+        }
         ub[0].buffer = s_f->ring;
         ub[0].offset = vat;
         ub[0].range = sizeof(VsBlock);
 
         {
-            VkDeviceSize fat = ring_alloc(sizeof(FsBlock), s_ubo_align, &map);
-            fb = (FsBlock *)map;
-            if (!fb) return;
+            VkDeviceSize fat;
             memset(fb, 0, sizeof *fb);
             for (i = 0; i < 4; i++) {
                 fb->tscale[i][0] = tscale[i][0];
@@ -3699,6 +3724,15 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
             fb->afunc = r[0x300 / 4] ? (int32_t)r[0x33C / 4] : 0x207;
             fb->aref = (float)(r[0x340 / 4] & 0xFF);
             nv2a_fog_params(r, b->xform, fb->fogp);
+            if (reuse && flast_gen == s_cb_gen && !memcmp(fb, &flast, sizeof *fb)) {
+                fat = flast_at;
+                s_st_ubo_reused++;
+            } else {
+                fat = ring_alloc(sizeof(FsBlock), s_ubo_align, &map);
+                if (!map) return;
+                memcpy(map, fb, sizeof *fb);
+                flast = *fb; flast_at = fat; flast_gen = s_cb_gen;
+            }
             ub[1].buffer = s_f->ring;
             ub[1].offset = fat;
             ub[1].range = sizeof(FsBlock);
@@ -3725,9 +3759,27 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
     }
     {
         /* Constants last: repeats append theirs right behind (pend_append). */
-        VkDeviceSize cat = ring_alloc(VK_CONST_SIZE, s_ubo_align, &map), range;
-        if (!map) return;
-        memcpy(map, b->vp_consts, VK_CONST_SIZE);
+        /* CT3-nx: a draw that cannot take repeats behind it (not a vertex
+         * program draw) reuses the last copy when the constants are the
+         * same (Switch test 10a: this 3 KB copy into the uncached ring was
+         * 2.2% of the graphics thread). */
+        static float clast[VK_CONST_SIZE / 4];
+        static VkDeviceSize clast_at;
+        static uint32_t clast_gen = ~0u;
+        static int creuse = -1;
+        VkDeviceSize cat, range;
+        if (creuse < 0) { const char *e = getenv("RECOMP_VK_UBO_REUSE"); creuse = !(e && *e == '0'); }
+        if (creuse && clast_gen == s_cb_gen && !pend_eligible(b) && !memcmp(b->vp_consts, clast, VK_CONST_SIZE)) {
+            cat = clast_at;
+            s_st_ubo_reused++;
+        } else {
+            cat = ring_alloc(VK_CONST_SIZE, s_ubo_align, &map);
+            if (!map) return;
+            memcpy(map, b->vp_consts, VK_CONST_SIZE);
+            memcpy(clast, b->vp_consts, VK_CONST_SIZE);
+            clast_at = cat;
+            clast_gen = s_cb_gen;
+        }
         range = (VkDeviceSize)VK_CONST_SIZE * VK_INST_MAX;
         if (range > s_ubo_range) range = s_ubo_range;
         if (cat + range > RING_BYTES) range = RING_BYTES - cat;
@@ -3750,7 +3802,24 @@ static void vk_draw_raw(const Nv2aRawBatch *b)
             wr[i].pImageInfo = &img[i - 2];
         }
     }
-    p_push_desc(s_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, s_layout, 0, 7, wr);
+    {   /* CT3-nx: not pushed again when this draw's set is the last one's
+         * (same buffers and offsets, same images and samplers, same command
+         * buffer, nothing else pushed since): with the uniform blocks reused,
+         * most draws in a run of one material are. */
+        static VkDescriptorBufferInfo last_ub[3];
+        static VkDescriptorImageInfo last_img[4];
+        static uint32_t last_gen = ~0u, last_other;
+        if (last_gen == s_cb_gen && last_other == s_push_other
+            && !memcmp(last_ub, ub, sizeof last_ub) && !memcmp(last_img, img, sizeof last_img)) {
+            s_st_push_skipped++;
+        } else {
+            p_push_desc(s_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, s_layout, 0, 7, wr);
+            memcpy(last_ub, ub, sizeof last_ub);
+            memcpy(last_img, img, sizeof last_img);
+            last_gen = s_cb_gen;
+            last_other = s_push_other;
+        }
+    }
 
     VT("  vkCmdDrawIndexed %u\n", n);
     /* The constants were the ring's last allocation, so a repeat's set
@@ -3934,6 +4003,7 @@ static void vk_clear(const Nv2aSurface *sf, const Nv2aRenderState *rs,
             vkCmdSetScissor(s_cb, 0, 1, &rect.rect);
             s_sc_cur = rect.rect;
             vkCmdPushConstants(s_cb, s_clr_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 16, c);
+            s_push_other++;                     /* (to be safe: another layout) */
             vkCmdDraw(s_cb, 3, 1, 0, 0);
             s_pipe_foreign = 1;                 /* the next draw rebinds its own */
             s_dyn_valid = 0;                    /* and resets its dynamic state */
@@ -4260,6 +4330,7 @@ static int present_fxaa(VkSurf *s, int cy, VkImage dst, VkImageView dview, VkFor
     wr.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     wr.pImageInfo = &ii;
     p_push_desc(s_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, s_pp_layout, 0, 1, &wr);
+    s_push_other++;                             /* set 0 of s_layout is gone */
     pc[0] = (float)dx; pc[1] = (float)dy; pc[2] = (float)dw; pc[3] = (float)dh;
     pc[4] = 1.0f / (float)s->pw; pc[5] = 1.0f / (float)s->ph;
     pc[6] = (float)cy / (float)s->ph; pc[7] = (float)(s->ph - 2 * cy) / (float)s->ph;
@@ -4336,6 +4407,13 @@ static void vk_flip(void)
         if (st < 0) {
             const char *e = getenv("RECOMP_DRAW_STATS");
             st = e && *e == '1';
+        }
+        if (!st && s_frame - st_frame >= 600) {   /* CT3-nx: always, every 600 frames */
+            fprintf(stderr, "[vk] per frame: %u draws -> %u draw calls, %u uniform blocks reused, %u descriptor pushes skipped\n",
+                    s_st_draws / (s_frame - st_frame), s_st_calls / (s_frame - st_frame),
+                    s_st_ubo_reused / (s_frame - st_frame), s_st_push_skipped / (s_frame - st_frame));
+            s_st_draws = s_st_calls = s_st_inst = s_st_ubo_reused = s_st_push_skipped = 0;
+            st_frame = s_frame;
         }
         if (st && s_frame - st_frame >= 300) {
             fprintf(stderr, "[vk] per frame: %u draws -> %u draw calls (%u instances appended)\n",

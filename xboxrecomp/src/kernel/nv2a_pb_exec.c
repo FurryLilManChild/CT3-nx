@@ -453,7 +453,7 @@ static uint64_t s_bulk_words, s_bulk_checked, s_bulk_bad;
 static int pb_bulk_on(void)
 {
     static int on = -1;
-    if (on < 0) { const char *e = getenv("RECOMP_PB_BULK"); on = e && *e ? *e - '0' : 0; }   /* off until verified */
+    if (on < 0) { const char *e = getenv("RECOMP_PB_BULK"); on = e && *e ? *e - '0' : 1; }
     return on;
 }
 
@@ -5329,7 +5329,7 @@ uint32_t nv2a_pb_exec_run(uint32_t subch, uint32_t method, int noninc,
      * is stored here in one go. A cloud census of a shift (RECOMP_PB_SCAN):
      * about 74% of all pushbuffer words were such methods, each through the
      * whole dispatcher (Switch test 9a: nv2a_pb_exec_method 12.8% of the
-     * graphics thread, nv2a_pb_scan 6.1%). RECOMP_PB_BULK=1 turns it on, =2 checks it word by word (off by default until verified). */
+     * graphics thread, nv2a_pb_scan 6.1%). RECOMP_PB_BULK=0 turns it off, =2 checks it word by word (cloud, one shift: 0 words not plain). */
     if (!noninc && pb_bulk_on() && method + count * 4 <= 0x2000) {
         uint32_t w = method / 4;
         for (i = 0; i < count && s_plain[w + i]; i++) {}

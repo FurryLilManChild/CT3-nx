@@ -825,18 +825,38 @@ static int lm_mode(void)
     return m;
 }
 
+/* One run of the key: its address, then its bytes, copied straight from
+ * guest RAM (Switch test 10a: reading it word by word and hashing it byte by
+ * byte cost 8.2% of the main thread, about what the light setup itself did;
+ * pitfall 33). Every run here is in ordinary RAM (D3D's globals, the
+ * device, the lights), never the tiled aperture the fold is for. */
 static uint32_t lm_add(uint32_t n, uint32_t va, uint32_t bytes)
 {
-    uint32_t i;
-    if (n + bytes + 4 > LM_KEY_MAX)
+    if (n + bytes + 4 > LM_KEY_MAX || va - 0xF0000000u < 0x08000000u)
         return LM_KEY_MAX + 1;
     memcpy(s_lm_cur + n, &va, 4);
-    n += 4;
-    for (i = 0; i < bytes; i += 4) {
-        uint32_t w = MEM32(XBOX_DEV_FOLD(va + i));
-        memcpy(s_lm_cur + n + i, &w, 4);
+    memcpy(s_lm_cur + n + 4, (const void *)XBOX_PTR(va), bytes);
+    return n + 4 + bytes;
+}
+
+/* The key's hash: 8 bytes at a time in four independent lanes. */
+static uint32_t lm_hash(const uint8_t *k, uint32_t n)
+{
+    uint64_t h0 = 0x9E3779B97F4A7C15ull, h1 = 0xC2B2AE3D27D4EB4Full, h2 = 0x165667B19E3779F9ull,
+             h3 = 0x27D4EB2F165667C5ull, w[4];
+    uint32_t i = 0;
+    for (; i + 32 <= n; i += 32) {
+        memcpy(w, k + i, 32);
+        h0 = (h0 ^ w[0]) * 0x100000001B3ull;
+        h1 = (h1 ^ w[1]) * 0x100000001B3ull;
+        h2 = (h2 ^ w[2]) * 0x100000001B3ull;
+        h3 = (h3 ^ w[3]) * 0x100000001B3ull;
     }
-    return n + bytes;
+    for (; i < n; i++)
+        h0 = (h0 ^ k[i]) * 0x100000001B3ull;
+    h0 ^= h1 * 31 ^ h2 * 37 ^ h3 * 41 ^ n;
+    h0 ^= h0 >> 29;
+    return (uint32_t)(h0 ^ (h0 >> 32));
 }
 
 void sub_000FE210(void)
@@ -864,9 +884,7 @@ void sub_000FE210(void)
     for (l = MEM32(dev + 0x398), k = 0; l && k < 8 && n <= LM_KEY_MAX; l = MEM32(l + 0x8C), k++)
         n = lm_add(n, l, 0x90);
     {
-        uint32_t h = 2166136261u, i, slot = 0, best = 0xFFFFFFFFu;
-        for (i = 0; i < n && n <= LM_KEY_MAX; i++)
-            h = (h ^ s_lm_cur[i]) * 16777619u;
+        uint32_t h = n <= LM_KEY_MAX ? lm_hash(s_lm_cur, n) : 0, i, slot = 0, best = 0xFFFFFFFFu;
         hit = 0;
         for (i = 0; i < LM_SLOTS; i++) {
             if (s_lm_tab[i].olen && s_lm_tab[i].hash == h && s_lm_tab[i].klen == n
@@ -891,8 +909,11 @@ void sub_000FE210(void)
             sub_000F8930();
             put = eax;
         }
-        for (i = 0; i < s_lm_olen; i++)
-            MEM32(XBOX_DEV_FOLD(put + 4 * i)) = s_lm_out[i];
+        if (put - 0xF0000000u >= 0x08000000u)   /* the pushbuffer is plain RAM: one copy */
+            memcpy((void *)XBOX_PTR(put), s_lm_out, 4 * s_lm_olen);
+        else
+            for (i = 0; i < s_lm_olen; i++)
+                MEM32(XBOX_DEV_FOLD(put + 4 * i)) = s_lm_out[i];
         MEM32(dev) = put + 4 * s_lm_olen;
         eax = MEM32(dev);
         esp += 8;                               /* return address, dev (ret 4) */
@@ -1000,4 +1021,93 @@ stats:
             s_lm_next = now + 10000;
         }
     }
+}
+
+/* ── Native vector and matrix maths (CT3-nx, Direct3D path) ────────────────
+ * Two of the game's own SSE helpers (linked from Microsoft's XGraphics
+ * library; 245 and 207 callers), done here in native code. Switch test 10a
+ * profile: lifted, they were 2.2% and 1.1% of the main thread, every SSE
+ * register a thread-local through the lifter's RecompXmm.
+ * Same results to the bit as the SSE code: single-precision products and
+ * sums in its exact order, never fused (fp-contract off; each step its own
+ * statement for compilers without the pragma). RECOMP_NATIVE_MATH=0 runs the
+ * lifted code. */
+extern void sub_000E4E73_gen(void);
+extern void sub_000E4EB9_gen(void);
+
+static int native_math_on(void)
+{
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("RECOMP_NATIVE_MATH"); on = e && *e ? *e - '0' : 1; }
+    return on;
+}
+/* RECOMP_NATIVE_MATH=2: the lifted code runs too and the two are compared */
+static uint64_t s_nm_checked, s_nm_bad;
+static void nm_check(const char *what, uint32_t out, const float *mine, int n)
+{
+    s_nm_checked++;
+    if (memcmp((const void *)XBOX_PTR(out), mine, 4 * n)) {
+        if (s_nm_bad++ < 20)
+            fprintf(stderr, "[MATH] %s differs from the lifted code (%llu of %llu)\n", what,
+                    (unsigned long long)s_nm_bad, (unsigned long long)s_nm_checked);
+    } else if ((s_nm_checked & 0xFFFFF) == 0)
+        fprintf(stderr, "[MATH] %llu native results checked, %llu different\n",
+                (unsigned long long)s_nm_checked, (unsigned long long)s_nm_bad);
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("fp-contract=off")
+#endif
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
+/* v (4 floats) times the rows of m: ((x*m0 + y*m1) + z*m2) + w*m3 */
+static void nm_vec4_rows(float o[4], const float v[4], const float m[16])
+{
+    int c;
+    for (c = 0; c < 4; c++) {
+        float p0 = v[0] * m[c], p1 = v[1] * m[4 + c], p2 = v[2] * m[8 + c], p3 = v[3] * m[12 + c];
+        float s = p0 + p1;
+        s = s + p2;
+        o[c] = s + p3;
+    }
+}
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
+
+/* 0x000E4E73: XGVec4Transform(out, v, m) (stdcall, ret 0xC; eax = out).
+ * movups loads, so no alignment is assumed. */
+void sub_000E4E73(void)
+{
+    uint32_t out = MEM32(esp + 4), v = MEM32(esp + 8), m = MEM32(esp + 12);
+    float fv[4], fm[16], fo[4];
+    if (!native_math_on()) { sub_000E4E73_gen(); return; }
+    memcpy(fv, (const void *)XBOX_PTR(v), 16);
+    memcpy(fm, (const void *)XBOX_PTR(m), 64);
+    nm_vec4_rows(fo, fv, fm);
+    if (native_math_on() == 2) { sub_000E4E73_gen(); nm_check("XGVec4Transform", out, fo, 4); return; }
+    memcpy((void *)XBOX_PTR(out), fo, 16);
+    eax = out;
+    esp += 16;                                  /* return address and 3 arguments */
+}
+
+/* 0x000E4EB9: XGMatrixMultiply(out, a, b) (stdcall, ret 0xC; eax = ecx = out).
+ * Every row is computed before any is stored, so out may be a or b. */
+void sub_000E4EB9(void)
+{
+    uint32_t out = MEM32(esp + 4), a = MEM32(esp + 8), b = MEM32(esp + 12);
+    float fa[16], fb[16], fo[16];
+    int r;
+    if (!native_math_on()) { sub_000E4EB9_gen(); return; }
+    memcpy(fa, (const void *)XBOX_PTR(a), 64);
+    memcpy(fb, (const void *)XBOX_PTR(b), 64);
+    for (r = 0; r < 4; r++)
+        nm_vec4_rows(fo + 4 * r, fa + 4 * r, fb);
+    if (native_math_on() == 2) { sub_000E4EB9_gen(); nm_check("XGMatrixMultiply", out, fo, 16); return; }
+    memcpy((void *)XBOX_PTR(out), fo, 64);
+    eax = out;
+    ecx = out;
+    esp += 16;
 }
