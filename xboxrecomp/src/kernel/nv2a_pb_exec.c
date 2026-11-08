@@ -447,6 +447,16 @@ static uint32_t s_sem_va;
 static uint32_t s_vtx_epoch;            /* Nv2aRawBatch.vtx_epoch */
 void nv2a_pb_set_semaphore_target(uint32_t guest_va) { s_sem_va = guest_va; }
 
+static uint8_t s_plain[0x2000 / 4];      /* CT3-nx: see nv2a_pb_exec_run */
+static int s_plain_reached;              /* RECOMP_PB_BULK=2: the check */
+static uint64_t s_bulk_words, s_bulk_checked, s_bulk_bad;
+static int pb_bulk_on(void)
+{
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("RECOMP_PB_BULK"); on = e && *e ? *e - '0' : 0; }   /* off until verified */
+    return on;
+}
+
 /* Slot + 1 of each method in s_unhandled: this runs millions of times a
  * second, so no search. The report sorts s_unhandled and rebuilds it. */
 static uint16_t s_unhandled_slot[0x2000 / 4];
@@ -3469,6 +3479,10 @@ static void raw_batch(void)
                     for (t = 0; t < 8; t++) for (z = 0; z < 5; z++)
                         if (vtx[t][z]) fprintf(stderr, " %d/%d: %llu", t, z, (unsigned long long)vtx[t][z]);
                     fprintf(stderr, "\n");
+                    fprintf(stderr, "[PBBULK] 10 s: %llu register words stored in runs; %llu checked, %llu not plain\n",
+                            (unsigned long long)s_bulk_words, (unsigned long long)s_bulk_checked,
+                            (unsigned long long)s_bulk_bad);
+                    s_bulk_words = s_bulk_checked = 0;
                 }
                 memset(vtx, 0, sizeof vtx); draws = cdraws = tot = 0; next = now + 10000;
             }
@@ -5284,6 +5298,13 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
                 a->size = 3;
             a->stride = (param >> 8)  & 0xFF;
         } else if (!imm_vertex_method(method, param)) {
+            /* CT3-nx: nothing here but the register store at the top, so a
+             * later run of these goes through nv2a_pb_exec_run in one go */
+            /* (texture registers are not: record_tex_reg above sees them) */
+            if (method != 0x17C8 && method != 0x17D0 && method != 0x1D70 && method != 0x0100
+                && !(method >= NV_TEX_FIRST && method <= NV_TEX_LAST))
+                s_plain[(method & 0x1FFCu) / 4] = 1;
+            s_plain_reached = 1;
             note_unhandled(method, param);
         }
         break;
@@ -5303,6 +5324,40 @@ uint32_t nv2a_pb_exec_run(uint32_t subch, uint32_t method, int noninc,
 
     if (subch != 0 || !count || pb_verbose())
         return 0;
+    /* CT3-nx: a run of plain state registers (s_plain: methods that reached
+     * the "no handler" end of nv2a_pb_exec_method, which only stores them)
+     * is stored here in one go. A cloud census of a shift (RECOMP_PB_SCAN):
+     * about 74% of all pushbuffer words were such methods, each through the
+     * whole dispatcher (Switch test 9a: nv2a_pb_exec_method 12.8% of the
+     * graphics thread, nv2a_pb_scan 6.1%). RECOMP_PB_BULK=1 turns it on, =2 checks it word by word (off by default until verified). */
+    if (!noninc && pb_bulk_on() && method + count * 4 <= 0x2000) {
+        uint32_t w = method / 4;
+        for (i = 0; i < count && s_plain[w + i]; i++) {}
+        if (i == count && pb_bulk_on() == 2) {
+            /* the check: each word through the dispatcher, which must end
+             * at the "no handler" site for every one of them */
+            for (i = 0; i < count; i++) {
+                s_plain_reached = 0;
+                nv2a_pb_exec_method(0, method + i * 4, p[i]);
+                s_bulk_checked++;
+                if (!s_plain_reached && s_bulk_bad++ < 20)
+                    fprintf(stderr, "[PBBULK] method %04X is not plain (param %08X)\n",
+                            method + i * 4, p[i]);
+            }
+            return count;
+        }
+        if (i == count) {
+            s_bulk_words += count;
+            for (i = 0; i < count; i++)
+                if (s_reg[w + i] != p[i]) {
+                    s_reg[w + i] = p[i];
+                    s_reg_dirty[(w + i) >> 4] = 1;
+                }
+            if (unhandled_on())
+                s_gpu.unhandled_total += count;
+            return count;
+        }
+    }
     if (method == NV097_ARRAY_ELEMENT16 && (noninc || count == 1)) {
         uint32_t w = NV097_ARRAY_ELEMENT16 / 4;
         if (s_reg[w] != p[count - 1]) {      /* only the last value is seen */

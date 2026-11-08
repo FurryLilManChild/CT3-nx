@@ -327,7 +327,7 @@ void nv2a_pb_scan(uint32_t put_phys)
             uint32_t method =  w & 0x1FFCu;
             int noninc = (w & 0xE0000000u) == 0x40000000u;
 
-            if (s_exec_enabled && !s_survey && count > 1
+            if (s_exec_enabled && !s_survey && count >= 1
                 && s_get + count * 4 <= PB_RAM_BYTES
                 && nv2a_pb_exec_run(subch, method, noninc,
                                     (const uint32_t *)(mem + (0x80000000u | s_get)), count)) {
