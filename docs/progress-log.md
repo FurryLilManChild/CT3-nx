@@ -1,5 +1,19 @@
 # Progress log (newest first)
 
+## 2026-11-07: Switch test 8i, re-initializing a held lock releases it
+
+- Switch 8h: first shift loaded (handover worked: "given to waiting thread 1015"); about 21 to 29 fps in the shift;
+  the busiest thread (75 to 88% of a core) looks like the renderer, the main thread about 50%. Going back in for a
+  speed profile: the second NOW LOADING hung, the loader (1016) on 0x002D83C4 with the main thread at depth 2.
+- Cloud reproduction: tools/linux/cloud_boot.sh with a pad script (Start, then A every 2.5 s; the shift times
+  out, results, mode select, a second shift). RECOMP_PAD_SCRIPT held only 64 steps; now 512.
+- Cause: the main thread leaves a load holding 0x002D83C4 one level deep (its wrappers 0x000A07F0 / 0x000A0810
+  enter and leave only while flag 0x002D8630 is set, and the loader, priority 15, clears the flag after a 33 ms
+  SleepEx at 0x000A0707 without the lock). The next load starts with RtlInitializeCriticalSection on that lock
+  (0x000A074D); on the Xbox that writes a fresh lock over the old hold, ours kept it. Now a holder that
+  initializes its lock releases it fully ("initialized again by its holder ... as on the Xbox").
+- Cloud: the second shift loads and runs.
+
 ## 2026-11-07: Switch test 8h, guest critical sections go to their oldest waiter
 
 - Switch test 8g: title screen, menus and character select at full speed. Then NOW LOADING for good: the loader

@@ -656,7 +656,45 @@ VOID __stdcall xbox_RtlInitializeCriticalSection(PRTL_CRITICAL_SECTION CriticalS
 {
     /* Creating the shadow here is not required -- Enter does it -- but doing
      * it now keeps the first Enter off the exclusive path. */
-    (void)xbox_cs_shadow(CriticalSection);
+    CRITICAL_SECTION* cs = xbox_cs_shadow(CriticalSection);
+    XBOX_CS_SLOT* slot = cs ? xbox_cs_slot_of(cs) : NULL;
+    /* CT3-nx: on the Xbox, RtlInitializeCriticalSection writes a fresh lock
+     * over the structure, so a hold left over from before is gone. Crazy
+     * Taxi 3 re-initializes its loader lock 0x002D83C4 at the start of every
+     * load (0x000A074D), and its main thread can leave a load with one level
+     * of it still held (it enters and leaves only while the "loading" flag
+     * 0x002D8630 is set, and the loader clears that flag on its own after a
+     * 33 ms sleep). The host lock kept that hold, so the next load's worker
+     * waited for good: Switch test 8h's second NOW LOADING, reproduced by the
+     * cloud boot test (two shifts). So a holder that initializes its own lock
+     * lets go of it fully, as the Xbox would. A lock held by another thread
+     * cannot be released from here; that is only logged. */
+    if (slot && slot->depth > 0 && slot->owner_tid == GetCurrentThreadId()) {
+        long d = slot->depth;
+        static LONG noted;
+        while (slot->depth > 0) {
+            xbox_cs_clear_owner(cs);
+            LeaveCriticalSection(cs);
+        }
+        if (slot->waiters > 0) {
+            AcquireSRWLockExclusive(&slot->q_lock);
+            if (slot->q_n > 0)
+                slot->handoff_tid = slot->q[0];
+            ReleaseSRWLockExclusive(&slot->q_lock);
+        }
+        if (InterlockedIncrement(&noted) <= 20)
+            fprintf(stderr, "  [CS] lock 0x%08X initialized again by its holder (thread %lu): %ld level(s) released, "
+                            "as on the Xbox\n",
+                    (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
+                    GetCurrentThreadId(), d);
+    } else if (slot && (slot->depth > 0 || slot->waiters > 0)) {
+        static LONG noted;
+        if (InterlockedIncrement(&noted) <= 20)
+            fprintf(stderr, "  [CS] lock 0x%08X initialized again while held by thread %lu (depth %ld, taken at "
+                            "0x%08X), %ld waiting; caller thread %lu\n",
+                    (uint32_t)((uintptr_t)CriticalSection - (uintptr_t)g_xbox_mem_offset),
+                    slot->owner_tid, slot->depth, slot->owner_site, slot->waiters, GetCurrentThreadId());
+    }
 }
 
 /* ============================================================================

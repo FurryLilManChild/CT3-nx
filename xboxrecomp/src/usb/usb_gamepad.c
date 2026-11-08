@@ -303,7 +303,7 @@ static uint8_t synthetic_buttons(void)
  * lsu lsd (left stick fully left/right/up/down).
  * Up to 64 steps. RECOMP_PAD2_SCRIPT drives the second pad the same way
  * (and keeps it plugged in), with times from the first pad's first read. */
-#define PAD_SCRIPT_MAX 64
+#define PAD_SCRIPT_MAX 512   /* CT3-nx: 64 ran out before a second shift in the cloud boot test */
 typedef struct { unsigned at, hold; uint8_t digital; uint8_t analog; uint8_t stick; } PadStep;
 static PadStep s_script_steps[USB_GAMEPADS][PAD_SCRIPT_MAX];
 static int s_script_count[USB_GAMEPADS] = { -1, -1 };
