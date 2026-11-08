@@ -167,3 +167,9 @@ the rule.
     and a per-operation precision check, and it took a profile and Mark's push to look at either. Upstream
     informs and is there to leverage; we choose the best path for each project.
 
+
+32. **Check a chained build's exit status before trusting what follows it.** (2026-11-08.) The first Switch
+    build of test 10a failed (the new [PBCALL] counter in nv2a_pb_scan.c called GetTickCount64, which only the
+    Linux build declares there), but the chained commands after it ran anyway: they listed the old NRO and
+    copied the old ELF as out/elf/ct3_10a.elf. Rule: chain the steps after a build with `&&`, and compare the
+    NRO's time with the build's start before delivering it.

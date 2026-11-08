@@ -25,6 +25,8 @@
 #include <stddef.h>   /* ptrdiff_t */
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include "../platform/win32_clock.h"   /* clock_gettime on Windows */
 
 extern ptrdiff_t xbox_GetMemoryOffset(void);
 
@@ -298,7 +300,9 @@ void nv2a_pb_scan(uint32_t put_phys)
                  * calls; counted every 10 s ([PBCALL]) for the Direct3D survey */
                 static uint32_t n, last_t; static uint64_t next;
                 static uint32_t tgt[8]; static uint32_t tn;
-                uint64_t now = GetTickCount64();
+                struct timespec ts; uint64_t now;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                now = (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000);
                 n++;
                 if (tn < 8) { uint32_t q; for (q = 0; q < tn && tgt[q] != target; q++) {} if (q == tn) tgt[tn++] = target; }
                 if (now >= next) {
@@ -327,7 +331,7 @@ void nv2a_pb_scan(uint32_t put_phys)
             uint32_t method =  w & 0x1FFCu;
             int noninc = (w & 0xE0000000u) == 0x40000000u;
 
-            if (s_exec_enabled && !s_survey && count >= 1
+            if (s_exec_enabled && !s_survey && count > 1
                 && s_get + count * 4 <= PB_RAM_BYTES
                 && nv2a_pb_exec_run(subch, method, noninc,
                                     (const uint32_t *)(mem + (0x80000000u | s_get)), count)) {
