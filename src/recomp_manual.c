@@ -767,3 +767,237 @@ void recomp_unimpl(const char *text, uint32_t va)
     }
     if (stop) abort();
 }
+
+/* ── D3D fixed-function light setup, 0x000FE210 (memoised) ─────────────
+ *
+ * The Direct3D path, step 1 (docs/d3d-path.md). XDK 4531's lazy state flush
+ * (0x000FE7D0 -> 0x000FE750) calls this whenever dirty bit 0x1000 is set:
+ * it walks the enabled lights (list at [dev+0x398], next at +0x8C), moves
+ * their directions into eye space with the view matrix at dev+0x750
+ * (0x000F9770, x87), normalises them (0x000F9A60), multiplies colours
+ * (0x000FDF30, 0x000FDE30) and writes the light registers 0x1000-0x13FC plus
+ * 0x294 / 0x314 / 0x17C4 / 0x3B8 / 0x298 / 0x3BC into the pushbuffer. In a
+ * shift it ran about every other draw (Switch test 9a: 10% of the main
+ * thread; the cloud scan: about 26% of all pushbuffer words), from inputs
+ * that change once a frame at most.
+ *
+ * So the output is kept with a copy of every input it reads, and a call
+ * whose inputs are byte-identical writes the kept words instead of running
+ * the maths. Inputs: the D3D globals listed below, dev+8, dev+0x2018, dev+0x9F0 (material),
+ * the view matrix, [dev+0x380] and the word at +4 of it, and each light's
+ * 0x90 bytes. RECOMP_LIGHT_MEMO=0 turns it off; RECOMP_LIGHT_MEMO=2 runs the
+ * original on every hit too and logs any difference (the cloud check). */
+extern void sub_000FE210_gen(void);
+extern void sub_000F8930(void);
+extern void sub_000F8930_gen(void);
+static uint32_t s_lm_makespace;     /* calls of D3D's make-room routine, 0x000F8930 */
+
+/* D3D's "make room in the pushbuffer" (0x000F8930: from [0x001056D0], via
+ * 0x000F87B0). It can put its own words (a fence, method 0x1D70) in the
+ * middle of the light setup's output; a kept result must never include them
+ * (the cloud check's only mismatches), so its calls are counted. */
+void sub_000F8930(void)
+{
+    s_lm_makespace++;
+    sub_000F8930_gen();
+}
+#define LM_KEY_MAX 4096
+#define LM_OUT_MAX 1024   /* (unused since the table) */
+/* 64 kept results, chosen by a hash of the key: each frame draws with a
+ * handful of materials under the same lights and view, so one kept result
+ * alone (24% reused in the cloud) is not enough. */
+#define LM_SLOTS 64
+#define LM_SLOT_KEY 1536
+#define LM_SLOT_OUT 160
+static uint8_t  s_lm_cur[LM_KEY_MAX];
+static struct { uint32_t hash, klen, olen, used; uint8_t key[LM_SLOT_KEY]; uint32_t out[LM_SLOT_OUT]; } s_lm_tab[LM_SLOTS];
+static uint32_t s_lm_tick;
+/* the slot this call uses (found or chosen), as the old single-entry names */
+static uint8_t  *s_lm_key;
+static uint32_t s_lm_klen, *s_lm_out, s_lm_olen;
+static uint64_t s_lm_hits, s_lm_miss, s_lm_bad, s_lm_next;
+static uint32_t lm_cur_slot;
+
+static int lm_mode(void)
+{
+    static int m = -1;
+    if (m < 0) { const char *e = getenv("RECOMP_LIGHT_MEMO"); m = e ? atoi(e) : 1; }
+    return m;
+}
+
+static uint32_t lm_add(uint32_t n, uint32_t va, uint32_t bytes)
+{
+    uint32_t i;
+    if (n + bytes + 4 > LM_KEY_MAX)
+        return LM_KEY_MAX + 1;
+    memcpy(s_lm_cur + n, &va, 4);
+    n += 4;
+    for (i = 0; i < bytes; i += 4) {
+        uint32_t w = MEM32(XBOX_DEV_FOLD(va + i));
+        memcpy(s_lm_cur + n + i, &w, 4);
+    }
+    return n + bytes;
+}
+
+void sub_000FE210(void)
+{
+    uint32_t dev = MEM32(esp + 4), n = 0, l, k, put0, put1, mode = (uint32_t)lm_mode();
+    int hit;
+
+    if (!mode || !dev) { sub_000FE210_gen(); return; }
+    /* D3D globals read by it and its helpers: 0x00102170 (0x000FE210),
+     * 0x001025D4-0x0010260B (0x000FE210, 0x000FD310, 0x000FDF30),
+     * 0x0010264C (all of them). A wider block (0x00102100-0x001026FF)
+     * never matched: 0x001026D0 changes on every call, the dirty mask
+     * 0x00102258 and others often (RECOMP_LIGHT_MEMO_WHY=1 counted them). */
+    n = lm_add(n, 0x00102170u, 12);
+    n = lm_add(n, 0x001025D4u, 0x38);
+    n = lm_add(n, 0x0010264Cu, 4);
+    n = lm_add(n, dev + 0x9F0, 0x88);           /* the material(s) (0x9F0-0xA77; 0xA78 moves on every call and is not read): 0x000FDF30, 0x000FDE30, 0x000FE0D0 */
+    n = lm_add(n, dev + 8, 4);
+    n = lm_add(n, dev + 0x2018, 4);
+    n = lm_add(n, dev + 0x750, 64);
+    n = lm_add(n, dev + 0x380, 4);
+    if (MEM32(dev + 0x380))
+        n = lm_add(n, MEM32(dev + 0x380), 8);
+    n = lm_add(n, dev + 0x398, 4);
+    for (l = MEM32(dev + 0x398), k = 0; l && k < 8 && n <= LM_KEY_MAX; l = MEM32(l + 0x8C), k++)
+        n = lm_add(n, l, 0x90);
+    {
+        uint32_t h = 2166136261u, i, slot = 0, best = 0xFFFFFFFFu;
+        for (i = 0; i < n && n <= LM_KEY_MAX; i++)
+            h = (h ^ s_lm_cur[i]) * 16777619u;
+        hit = 0;
+        for (i = 0; i < LM_SLOTS; i++) {
+            if (s_lm_tab[i].olen && s_lm_tab[i].hash == h && s_lm_tab[i].klen == n
+                && !memcmp(s_lm_tab[i].key, s_lm_cur, n)) { slot = i; hit = 1; break; }
+            if (s_lm_tab[i].used < best) { best = s_lm_tab[i].used; slot = i; }
+        }
+        s_lm_tab[slot].used = ++s_lm_tick;
+        if (!hit) { s_lm_tab[slot].hash = h; }
+        s_lm_key = s_lm_tab[slot].key;
+        s_lm_out = s_lm_tab[slot].out;
+        s_lm_klen = s_lm_tab[slot].klen;
+        s_lm_olen = s_lm_tab[slot].olen;
+        if (n > LM_SLOT_KEY) hit = 0;
+        if (!hit) s_lm_tab[slot].olen = 0;      /* refilled below if it can be kept */
+        lm_cur_slot = slot;
+    }
+
+    if (hit && mode != 2) {
+        uint32_t put = MEM32(dev), i;
+        if (put + 4 * s_lm_olen >= MEM32(dev + 4)) {   /* make room for the whole block */
+            PUSH32(esp, 0x000FE26Eu);
+            sub_000F8930();
+            put = eax;
+        }
+        for (i = 0; i < s_lm_olen; i++)
+            MEM32(XBOX_DEV_FOLD(put + 4 * i)) = s_lm_out[i];
+        MEM32(dev) = put + 4 * s_lm_olen;
+        eax = MEM32(dev);
+        esp += 8;                               /* return address, dev (ret 4) */
+        s_lm_hits++;
+        goto stats;
+    }
+
+    {
+        uint32_t ms0 = s_lm_makespace;
+        put0 = MEM32(dev);
+        sub_000FE210_gen();
+        put1 = MEM32(dev);
+        if (s_lm_makespace != ms0) {            /* its words may be in there: keep nothing */
+            if (!hit) { s_lm_miss++; s_lm_olen = 0; }
+            goto stats;
+        }
+    }
+    if (hit) {                                  /* mode 2: compare */
+        uint32_t i, len = put1 >= put0 ? (put1 - put0) / 4 : 0;
+        int same = len == s_lm_olen;
+        for (i = 0; same && i < len; i++)
+            same = MEM32(XBOX_DEV_FOLD(put0 + 4 * i)) == s_lm_out[i];
+        s_lm_hits++;
+        if (!same && s_lm_bad++ < 20) {
+            uint32_t d0 = 0;
+            while (d0 < len && d0 < s_lm_olen && MEM32(XBOX_DEV_FOLD(put0 + 4 * d0)) == s_lm_out[d0]) d0++;
+            fprintf(stderr, "[D3D] light memo MISMATCH: %u words now, %u kept; first difference at word %u:"
+                    " now %08X kept %08X (words before: %08X %08X %08X)\n", len, s_lm_olen, d0,
+                    d0 < len ? MEM32(XBOX_DEV_FOLD(put0 + 4 * d0)) : 0, d0 < s_lm_olen ? s_lm_out[d0] : 0,
+                    d0 >= 3 ? s_lm_out[d0 - 3] : 0, d0 >= 2 ? s_lm_out[d0 - 2] : 0, d0 >= 1 ? s_lm_out[d0 - 1] : 0);
+        }
+    } else {
+        s_lm_miss++;
+        if (getenv("RECOMP_LIGHT_MEMO_WHY") && n == s_lm_klen) {   /* every key word that moved, counted */
+            static uint32_t chg[LM_KEY_MAX / 4], calls;
+            uint32_t w;
+            for (w = 0; w < n / 4; w++)
+                if (memcmp(s_lm_cur + 4 * w, s_lm_key + 4 * w, 4)) chg[w]++;
+            if (++calls % 20000 == 0) {
+                uint32_t top, best, t;
+                fprintf(stderr, "[D3D] light memo key words that changed (key offset: count):");
+                for (t = 0; t < 12; t++) {
+                    best = 0; top = 0;
+                    for (w = 0; w < n / 4; w++) if (chg[w] > best) { best = chg[w]; top = w; }
+                    if (!best) break;
+                    fprintf(stderr, " %u:%u", 4 * top, best);
+                    chg[top] = 0;
+                }
+                fprintf(stderr, "\n");
+                memset(chg, 0, sizeof chg);
+            }
+        }
+        if (0) {
+            static int shown;
+            uint32_t i, va = 0, at = 0, j = 0;
+            for (i = 0; i < n && shown < 40; ) {
+                uint32_t hv, bytes;
+                memcpy(&hv, s_lm_cur + i, 4);
+                j = i + 4;
+                /* each run is (va, bytes...) and the next run starts at the next va; find this run's end */
+                (void)hv;
+                break;
+            }
+            for (i = 0; i < n; i++)
+                if (s_lm_cur[i] != s_lm_key[i]) { at = i; break; }
+            if (i < n && shown++ < 40) {
+                /* walk the runs to name the address */
+                uint32_t p2 = 0, runva = 0, runoff = 0;
+                uint32_t sizes[] = { 0x600, 4, 4, 64, 4, 8, 4 };
+                uint32_t si = 0;
+                while (p2 < n) {
+                    uint32_t sz = si < 7 ? sizes[si] : 0x90;
+                    if (si == 5 && !MEM32(dev + 0x380)) { si++; continue; }
+                    memcpy(&runva, s_lm_cur + p2, 4);
+                    if (at < p2 + 4 + sz) { runoff = at < p2 + 4 ? 0 : at - p2 - 4; break; }
+                    p2 += 4 + sz; si++;
+                }
+                va = runva + runoff;
+                fprintf(stderr, "[D3D] light memo: input 0x%08X changed (run base 0x%08X, dev 0x%08X)\n", va, runva, dev);
+            }
+            (void)j;
+        }
+        s_lm_olen = 0;
+        /* Keep it only when the words went out in one run (no wrap). */
+        if (n <= LM_SLOT_KEY && put1 > put0 && (put1 - put0) / 4 <= LM_SLOT_OUT) {
+            uint32_t i;
+            s_lm_olen = (put1 - put0) / 4;
+            for (i = 0; i < s_lm_olen; i++)
+                s_lm_out[i] = MEM32(XBOX_DEV_FOLD(put0 + 4 * i));
+            memcpy(s_lm_key, s_lm_cur, n);
+            s_lm_klen = n;
+            s_lm_tab[lm_cur_slot].klen = n;
+            s_lm_tab[lm_cur_slot].olen = s_lm_olen;
+        }
+    }
+stats:
+    {
+        uint64_t now = cri_now_ms();
+        if (now >= s_lm_next) {
+            if (s_lm_next)
+                fprintf(stderr, "[D3D] light setup 10 s: %llu kept results reused, %llu computed, %llu mismatches\n",
+                        (unsigned long long)s_lm_hits, (unsigned long long)s_lm_miss,
+                        (unsigned long long)s_lm_bad);
+            s_lm_hits = s_lm_miss = 0;
+            s_lm_next = now + 10000;
+        }
+    }
+}

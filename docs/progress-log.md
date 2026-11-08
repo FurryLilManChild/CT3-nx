@@ -1,5 +1,18 @@
 # Progress log (newest first)
 
+## 2026-11-08: Direct3D path, step 1: the light setup memoised (Switch test 10a)
+
+- Cloud pushbuffer census (RECOMP_PB_SCAN=1, a shift): the light registers 0x1000-0x10BC about 26% of all words
+  (rewritten about every other draw), ARRAY_ELEMENT16 indices about 16%.
+- 0x000FE210 (D3D's fixed-function light setup) is now kept: 64 results keyed by every input it reads (D3D globals
+  0x00102170, 0x001025D4-0x0010260B, 0x0010264C; dev+8, +0x2018, +0x380 and its word +4, +0x398, the view matrix
+  at +0x750, the material at +0x9F0-0xA77; each light's 0x90 bytes). A call with the same inputs writes the kept
+  words. 0x000F8930 (D3D's make-room routine, which can put a fence, 0x1D70, in the middle) is counted, and a
+  result it touched is never kept. RECOMP_LIGHT_MEMO=0 off, =2 runs the original on every hit and compares.
+- Cloud, a shift with =2: about 81% of calls reuse a kept result, 0 mismatches word for word. Wider keys never
+  matched (0x001026D0 and dev+0xA78 change on every call and are not read).
+- The lifter's x87 control-word local (translator.py) is in this regen too.
+
 ## 2026-11-08: Switch 9a results and the Direct3D survey
 
 - 9a in a shift: 25.8 to 35 fps (about 31 on average) against 20.7 to 30 (about 25) for 8i; 50 ms frames 260 to 36.
