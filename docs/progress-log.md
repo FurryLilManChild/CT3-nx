@@ -1,5 +1,20 @@
 # Progress log (newest first)
 
+## 2026-11-08: back on the Direct3D path (Switch test 11a)
+
+- Mark: his design choices are binding (CLAUDE.md, pitfall 35). docs/d3d-path.md step 3, entry points by cost.
+- Native C written from the disassembly, each checked in the cloud against the lifted code on the same state over
+  a shift (RECOMP_D3D_NATIVE_*=2): light setup 0x000FE210 with 0x000FD310, 0x000FDF30, 0x000FDE30, 0x000F9770,
+  0x000F9A60, 0x000F99B0, 0x000F9740, 0x000F9710 (about 2 million calls); SetTexture 0x000F61D0 (1.6 million);
+  sampler state 0x000FD6A0 (0.85 million); matrix copy 0x000F81F0, SetMaterial 0x000F5190, SetPixelShader
+  0x000F8000 (4.4 million together); flush dispatcher 0x000FE750 and per-draw flush 0x000FE7D0 (2.1 million).
+  0 different. x87 parts in double precision in the x87 code's order; the lifted code runs when the control word
+  is not 53-bit. 0x000FE0D0 (specular power), 0x000F4C00 (texture free) and 0x000F8930 (make room) stay lifted.
+- GPU frame timer: two timestamps a frame, "[vk] GPU time" every 600 frames.
+- One cloud run hung in the menus (a CRI sound thread holding the guest lock at priority 15, the GPU idle);
+  three later runs with the same code did not. Cloud runs now have a watcher that dumps all thread stacks after
+  40 s without a new frame.
+
 ## 2026-11-08: Switch test 10c results
 
 - A shift at 30 to 50 fps (10b: 30 to 47); heaviest scenes still 30. Recording thread works as designed (about
