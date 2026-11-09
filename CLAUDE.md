@@ -41,6 +41,10 @@ Linux build on lavapipe needs about 7 minutes to reach a stage).
 Mark's standing rule (2026-10-28, repeated after a slip): do not start cloud test runs on your own. Build checks
 (tools/linux/wincheck.sh) are fine; anything that runs the game goes to Mark. If the cloud would genuinely be
 more efficient for a step, say so and ask him first.
+Mark's design choices are binding (2026-11-08, after pitfall 35). Performance work follows the Direct3D path he
+chose (docs/d3d-path.md: native replacements for D3D's entry points, the Switch doing the work itself). Every build
+proposal names the plan step it serves. Anything off the plan is raised with him as a proposed change and waits
+for his yes, before any code is written for it.
 Priority (carried over from sheroes-nx): playability first. Get a shift running and playable before cosmetic
 issues.
 Confirm with Mark before starting any build, including quick fix builds. Deliver each Switch test build by
