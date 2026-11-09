@@ -1582,3 +1582,373 @@ void sub_000F61D0(void)
     esp += 12;                                  /* return address, stage, texture (ret 8) */
     s_nt_calls++;
 }
+
+/* ── Direct3D path: texture stage sampler state (0x000FD6A0) in native code ─
+ * docs/d3d-path.md step 3. 0x000FD6A0(dev), stdcall: the lazy flush's group
+ * handler for the four texture stages' sampler state (address modes, filters,
+ * LOD bias, border colour), called by 0x000FE750 for each stage whose bit is
+ * set in D3D's dirty mask (0x00102258). Switch test 10c profile: 1.2% of the
+ * main thread. Writes each stage's control word cache (dev+0x360+4*stage) and
+ * five pushbuffer words (0x1B0C/0x1B10/0x1B14... + 64*stage). The LOD bias is
+ * x87 (double precision, as the lifted code with the main thread's control
+ * word) then cvttss2si (0x000FA010).
+ * RECOMP_D3D_NATIVE_SAMP=0: the lifted code; =2: both, compared. */
+extern void sub_000FD6A0_gen(void);
+
+static void ns_sampler(uint32_t dev)
+{
+    uint32_t mask = nl_g32(0x00102258u), stg = 0x41B14, ecx = dev + 0x360, esi = 0x00102264u, n;
+    for (n = 4; n; n--, ecx += 4, stg += 0x40, mask >>= 1, esi += 0x80) {
+        uint32_t l28, ebp, edi, ebx, l10 = 0x2000, ecx2, put;
+        int32_t lod;
+        if (!(mask & 1)) continue;
+        edi = ((nl_g32(esi + 4) << 8) | nl_g32(esi)) << 8;
+        l28 = nl_g32((nl_g32(esi + 0x6C) & 0xFFFF) * 4 + 0x001025C4u) | edi | nl_g32(esi - 4);
+        ebp = (nl_g32(esi + 0x18) << 26) | nl_g32(esi + 0x28) | nl_g32(esi + 0x20) | 0x3FFC0;
+        if (nl_g32(ecx + 0x718)) ebp |= 0x40000000;
+        edi = nl_g32(esi + 0xC);
+        ebx = nl_g32(esi + 8);
+        if (edi < 3 && ebx < 3) {
+            /* as is */
+        } else if (edi <= 3 && ebx <= 3) {
+            uint32_t e = nl_g32(esi + 0x1C);
+            if (!e) { edi = ebx = 1; }
+            else { e--; edi = ebx = 2; ebp |= e << 4; }
+        } else {
+            if (edi == 5 || ebx == 5) l10 = 0x4000;
+            l10 |= 0x70000;
+            edi = 2; ebx = 4;
+        }
+        nt_w(ecx, ebp | 0x40000000u);
+        {
+            double v = (double)nl_gf(esi + 0x14);
+            float t;
+            v = v + (double)nl_gf(dev + 0x464);
+            v = v * (double)nl_gf(0x0012E55Cu);
+            v = v + (double)nl_gf(0x0012AD14u);
+            t = (float)v;
+            lod = (int32_t)RECOMP_CVT_SI(t, 0);
+        }
+        if (lod < -0x1000) lod = -0x1000;
+        else if (lod > 0xFFF) lod = 0xFFF;
+        ecx2 = nl_g32(esi + 0x2C) >= 0x19 ? 0xC0000000u : nl_g32(esi + 0x24);
+        edi = nl_g32((nl_g32(esi + 0x10) + edi * 3) * 4 + 0x0010150Cu);
+        edi |= (uint32_t)lod & 0x1FFF;
+        edi |= ebx << 24;
+        edi |= ecx2;
+        edi |= l10;
+        put = nl_g32(dev);
+        if (put >= nl_g32(dev + 4)) { PUSH32(esp, 0x000FD826u); sub_000F8930(); put = eax; }
+        nt_w(put, stg + 0x3FFF4); nt_w(put + 4, l28); nt_w(put + 8, ebp);
+        nt_w(put + 0xC, stg); nt_w(put + 0x10, edi);
+        nt_w(dev, put + 0x14);
+    }
+}
+
+static uint64_t s_ns_checked, s_ns_bad, s_ns_skip;
+void sub_000FD6A0(void)
+{
+    static int m = -1;
+    uint32_t dev = MEM32(esp + 4);
+    if (m < 0) { const char *e = getenv("RECOMP_D3D_NATIVE_SAMP"); m = e && *e ? *e - '0' : 1; }
+    if (!m || !dev || (recomp_fpcw_ld() & 0x300u) == 0) { sub_000FD6A0_gen(); return; }
+    if (m == 2) {
+        uint32_t before[4], lifted[4], pb[64], put0 = nl_g32(dev), put1, i, ms0 = s_lm_makespace, same = 1;
+        for (i = 0; i < 4; i++) before[i] = nl_g32(dev + 0x360 + 4 * i);
+        sub_000FD6A0_gen();
+        put1 = nl_g32(dev);
+        if (s_lm_makespace != ms0 || put1 < put0 || put1 - put0 > 256) { s_ns_skip++; return; }
+        for (i = 0; i < 4; i++) lifted[i] = nl_g32(dev + 0x360 + 4 * i);
+        for (i = 0; i < (put1 - put0) / 4; i++) pb[i] = nl_g32(put0 + 4 * i);
+        for (i = 0; i < 4; i++) memcpy((void *)XBOX_PTR(dev + 0x360 + 4 * i), &before[i], 4);
+        memcpy((void *)XBOX_PTR(dev), &put0, 4);
+        ns_sampler(dev);
+        s_ns_checked++;
+        if (nl_g32(dev) != put1) same = 0;
+        for (i = 0; same && i < 4; i++) if (nl_g32(dev + 0x360 + 4 * i) != lifted[i]) same = 0;
+        for (i = 0; same && i < (put1 - put0) / 4; i++) if (nl_g32(put0 + 4 * i) != pb[i]) same = 0;
+        if (!same && s_ns_bad++ < 20)
+            fprintf(stderr, "[D3D] native sampler state differs from the lifted code (mask %08X, %u words)\n",
+                    nl_g32(0x00102258u), (put1 - put0) / 4);
+        if ((s_ns_checked & 0xFFFF) == 0)
+            fprintf(stderr, "[D3D] native sampler state: %llu checked, %llu different, %llu not checked\n",
+                    (unsigned long long)s_ns_checked, (unsigned long long)s_ns_bad, (unsigned long long)s_ns_skip);
+        return;
+    }
+    ns_sampler(dev);
+    esp += 8;                                   /* return address, dev (ret 4) */
+}
+
+/* ── Direct3D path: three small copiers in native code ────────────────────
+ * docs/d3d-path.md step 3. Switch test 10c profile (main thread):
+ *   0x000F81F0 (0.9%): a 4x4 matrix into the pushbuffer, transposed, behind
+ *     a method word; stdcall (out, method, matrix), ret 0xC; eax = out.
+ *     Callers: SetTransform paths 0x000F6420, 0x000F64E0, 0x000F70C0,
+ *     0x000FE550.
+ *   0x000F5190 (0.8%): SetMaterial; stdcall (material), ret 4: 17 dwords to
+ *     dev+0x9F0, then D3D's dirty mask (0x00102258) |= 0x1000.
+ *   0x000F8000 (0.8%): SetPixelShader; see below.
+ * Plain dword copies, so the native versions write exactly the same words.
+ * RECOMP_D3D_NATIVE_COPY=0: the lifted code; =2: both, compared. */
+extern void sub_000F81F0_gen(void);
+extern void sub_000F5190_gen(void);
+
+static int nc_mode(void)
+{
+    static int m = -1;
+    if (m < 0) { const char *e = getenv("RECOMP_D3D_NATIVE_COPY"); m = e && *e ? *e - '0' : 1; }
+    return m;
+}
+static uint64_t s_nc_checked, s_nc_bad;
+static void nc_report(const char *what, int same)
+{
+    s_nc_checked++;
+    if (!same && s_nc_bad++ < 20)
+        fprintf(stderr, "[D3D] native %s differs from the lifted code\n", what);
+    if ((s_nc_checked & 0x3FFFF) == 0)
+        fprintf(stderr, "[D3D] native copiers: %llu checked, %llu different\n",
+                (unsigned long long)s_nc_checked, (unsigned long long)s_nc_bad);
+}
+
+static void nc_matrix(uint32_t out, uint32_t method, uint32_t m)
+{
+    uint32_t w[17], i;
+    const uint8_t *src = (const uint8_t *)XBOX_PTR(m);
+    w[0] = method;
+    for (i = 0; i < 16; i++)                    /* out[1 + 4*c + r] = m[r][c] */
+        memcpy(&w[1 + i], src + 4 * ((i & 3) * 4 + (i >> 2)), 4);
+    memcpy((void *)XBOX_PTR(out), w, sizeof w);
+}
+
+void sub_000F81F0(void)
+{
+    uint32_t out = MEM32(esp + 4), method = MEM32(esp + 8), m = MEM32(esp + 12), mode = (uint32_t)nc_mode();
+    if (!mode || out - 0xF0000000u < 0x08000000u || m - 0xF0000000u < 0x08000000u) { sub_000F81F0_gen(); return; }
+    if (mode == 2) {
+        uint32_t a[17], b[17];
+        sub_000F81F0_gen();
+        memcpy(a, (const void *)XBOX_PTR(out), sizeof a);
+        nc_matrix(out, method, m);
+        memcpy(b, (const void *)XBOX_PTR(out), sizeof b);
+        nc_report("matrix copy (0x000F81F0)", !memcmp(a, b, sizeof a));
+        return;
+    }
+    nc_matrix(out, method, m);
+    eax = out;
+    ecx = MEM32(m + 0x3C);
+    edx = MEM32(m + 0x2C);
+    esp += 16;
+}
+
+void sub_000F5190(void)
+{
+    uint32_t mat = MEM32(esp + 4), mode = (uint32_t)nc_mode(), dev = nl_g32(0x001051D0u);
+    if (!mode) { sub_000F5190_gen(); return; }
+    if (mode == 2) {
+        uint32_t a[17], b[17], ma, mb, before[17], mk = nl_g32(0x00102258u);
+        memcpy(before, (const void *)XBOX_PTR(dev + 0x9F0), sizeof before);
+        sub_000F5190_gen();
+        memcpy(a, (const void *)XBOX_PTR(dev + 0x9F0), sizeof a); ma = nl_g32(0x00102258u);
+        memcpy((void *)XBOX_PTR(dev + 0x9F0), before, sizeof before);
+        memcpy((void *)XBOX_PTR(0x00102258u), &mk, 4);
+        memmove((void *)XBOX_PTR(dev + 0x9F0), (const void *)XBOX_PTR(mat), 0x44);
+        MEM32(0x00102258u) = nl_g32(0x00102258u) | 0x1000;
+        memcpy(b, (const void *)XBOX_PTR(dev + 0x9F0), sizeof b); mb = nl_g32(0x00102258u);
+        nc_report("SetMaterial (0x000F5190)", !memcmp(a, b, sizeof a) && ma == mb);
+        return;
+    }
+    memmove((void *)XBOX_PTR(dev + 0x9F0), (const void *)XBOX_PTR(mat), 0x44);
+    MEM32(0x00102258u) = nl_g32(0x00102258u) | 0x1000;
+    ecx = nl_g32(0x00102258u);
+    esp += 8;
+}
+
+/* 0x000F8000: SetPixelShader(ps), stdcall, ret 4 (the register combiners:
+ * 0x0260 x8, 0x0A60 x32, 0x17F8, 0x1E20, 0x1E40 x9, 0x1E74, 0x0288 x2 when
+ * the shader has final-combiner constants). Native for the common case, one
+ * shader replacing another; with no shader (0x000F3D50) or none before
+ * (0x000F43F0 first) the lifted code runs. */
+extern void sub_000F8000_gen(void);
+
+static void nc_pixelshader(uint32_t dev, uint32_t ps)
+{
+    uint32_t ebp = nl_g32(ps + 8), put, w[63], n;
+    const uint8_t *s = (const uint8_t *)XBOX_PTR(ebp);
+    MEM32(dev + 0x370) = ps;
+    MEM32(dev + 0x374) = nl_g32(ebp + 0x24) | nl_g32(ebp + 0x20);
+    MEM32(dev + 0x378) = nl_g32(ebp + 0xEC) & 0x100;
+    MEM32(dev + 0x37C) = nl_g32(ebp + 0xD8);
+    MEM32(0x00102258u) = nl_g32(0x00102258u) | 0x4000;
+    put = nl_g32(dev);
+    if (put >= nl_g32(dev + 4)) { PUSH32(esp, 0x000F80C6u); sub_000F8930(); put = eax; }
+    w[0] = 0x200260; memcpy(&w[1], s, 32);
+    w[9] = 0x800A60; memcpy(&w[10], s + 0x28, 128);
+    w[42] = 0x417F8; memcpy(&w[43], s + 0xA8, 4);
+    w[44] = 0x81E20; memcpy(&w[45], s + 0xAC, 8);
+    w[47] = 0x241E40; memcpy(&w[48], s + 0xB4, 36);
+    w[57] = 0x81E74; memcpy(&w[58], s + 0xDC, 8);
+    n = 60;
+    if (nl_g32(dev + 0x374)) { w[60] = 0x80288; memcpy(&w[61], s + 0x20, 8); n = 63; }
+    memcpy((void *)XBOX_PTR(put), w, 4 * n);
+    MEM32(dev) = put + 4 * n;
+    if (!(nl_g32(dev + 8) & 0x10)) {
+        memmove((void *)XBOX_PTR(0x00102460u), s, 0x39 * 4);
+        MEM32(0x00102638u) = nl_g32(ebp + 0xD8);
+    }
+}
+
+void sub_000F8000(void)
+{
+    uint32_t ps = MEM32(esp + 4), mode = (uint32_t)nc_mode(), dev = nl_g32(0x001051D0u);
+    if (!mode || !ps || !nl_g32(dev + 0x370)) { sub_000F8000_gen(); return; }
+    if (mode == 2) {
+        static const uint32_t a0[] = { 0x370, 0x374, 0x378, 0x37C };
+        uint32_t before[4], after[4], mk0 = nl_g32(0x00102258u), mk1, put0 = nl_g32(dev), put1, i, same = 1;
+        uint32_t pb[64], g0[0x3A], g1[0x3A], ms0 = s_lm_makespace, x0 = nl_g32(0x00102638u), x1;
+        for (i = 0; i < 4; i++) before[i] = nl_g32(dev + a0[i]);
+        memcpy(g0, (const void *)XBOX_PTR(0x00102460u), sizeof g0);
+        sub_000F8000_gen();
+        put1 = nl_g32(dev);
+        if (s_lm_makespace != ms0 || put1 - put0 > 256) return;
+        for (i = 0; i < 4; i++) after[i] = nl_g32(dev + a0[i]);
+        mk1 = nl_g32(0x00102258u);
+        memcpy(pb, (const void *)XBOX_PTR(put0), put1 - put0);
+        memcpy(g1, (const void *)XBOX_PTR(0x00102460u), sizeof g1);
+        x1 = nl_g32(0x00102638u);
+        MEM32(0x00102638u) = x0;
+        for (i = 0; i < 4; i++) MEM32(dev + a0[i]) = before[i];
+        MEM32(0x00102258u) = mk0;
+        MEM32(dev) = put0;
+        memcpy((void *)XBOX_PTR(0x00102460u), g0, sizeof g0);
+        nc_pixelshader(dev, ps);
+        if (nl_g32(dev) != put1 || nl_g32(0x00102258u) != mk1) same = 0;
+        for (i = 0; same && i < 4; i++) if (nl_g32(dev + a0[i]) != after[i]) same = 0;
+        if (same && memcmp(pb, (const void *)XBOX_PTR(put0), put1 - put0)) same = 0;
+        if (same && memcmp(g1, (const void *)XBOX_PTR(0x00102460u), sizeof g1)) same = 0;
+        if (nl_g32(0x00102638u) != x1) same = 0;
+        nc_report("SetPixelShader (0x000F8000)", same);
+        return;
+    }
+    nc_pixelshader(dev, ps);
+    esp += 8;
+}
+
+/* ── Direct3D path: the lazy state flush (0x000FE7D0, 0x000FE750) ─────────
+ * docs/d3d-path.md step 3, "the draw calls and the lazy flush first".
+ * 0x000FE750: D3D's flush dispatcher. It reads the dirty mask (0x00102258)
+ * once, calls each dirty group's handler (0x000FD3B0 0x100, 0x000FD520 0x4000,
+ * 0x00100A30 0x800, 0x000FD6A0 0xF, 0x000FD890 0x2000, 0x000FDA70 0x400,
+ * 0x000FE210 0x1000, 0x000FE550 0x200; each stdcall (dev)), then stores the
+ * mask it read & 0xC0000070. 0x000FE7D0 (thiscall ecx = dev, arg = base
+ * vertex, ret 4): the per-draw flush. It clears 0x50 in the mask, runs the
+ * dispatcher when any group is dirty, then (vertex format or base vertex
+ * changed) writes the vertex formats (0x1760 x16) and the vertex array
+ * offsets (0x1720 + 4*i for each used attribute). Switch test 10c: 0.6% and
+ * 0.5% of the main thread, plus the lifted call overhead around each handler.
+ * RECOMP_D3D_NATIVE_FLUSH=0: the lifted code; =2: 0x000FE7D0 checked against
+ * the lifted code when it does not dispatch. */
+extern void sub_000FE750_gen(void);
+extern void sub_000FE7D0_gen(void);
+extern void sub_000FD3B0(void);
+extern void sub_000FD520(void);
+extern void sub_00100A30(void);
+extern void sub_000FD890(void);
+extern void sub_000FDA70(void);
+extern void sub_000FE550(void);
+
+static int nf_mode(void)
+{
+    static int m = -1;
+    if (m < 0) { const char *e = getenv("RECOMP_D3D_NATIVE_FLUSH"); m = e && *e ? *e - '0' : 1; }
+    return m;
+}
+
+#define NF_CALL(fn, ret) do { PUSH32(esp, dev); PUSH32(esp, (ret)); fn(); } while (0)
+void sub_000FE750(void)
+{
+    uint32_t mask, dev;
+    if (!nf_mode()) { sub_000FE750_gen(); return; }
+    mask = nl_g32(0x00102258u);
+    dev = nl_g32(0x001051D0u);
+    if (mask & 0x100)  NF_CALL(sub_000FD3B0, 0x000FE769u);
+    if (mask & 0x4000) NF_CALL(sub_000FD520, 0x000FE774u);
+    if (mask & 0x800)  NF_CALL(sub_00100A30, 0x000FE77Fu);
+    if (mask & 0xF)    NF_CALL(sub_000FD6A0, 0x000FE78Au);
+    if (mask & 0x2000) NF_CALL(sub_000FD890, 0x000FE795u);
+    if (mask & 0x400)  NF_CALL(sub_000FDA70, 0x000FE7A0u);
+    if (mask & 0x1000) NF_CALL(sub_000FE210, 0x000FE7ABu);
+    if (mask & 0x200)  NF_CALL(sub_000FE550, 0x000FE7B6u);
+    MEM32(0x00102258u) = mask & 0xC0000070u;
+    esp += 4;                                   /* return address */
+}
+
+static void nf_vertex_arrays(uint32_t dev, uint32_t mask, uint32_t base)
+{
+    uint32_t t = nl_g32(dev + 0x380), map, put, c, i;
+    const uint8_t *m;
+    MEM32(dev + 0x20) = base;
+    map = 0x00214B18u + (nl_g32(t + 4) & 0x10);
+    m = (const uint8_t *)XBOX_PTR(map);
+    put = nl_g32(dev);
+    if (put >= nl_g32(dev + 4)) { PUSH32(esp, 0x000FE83Fu); sub_000F8930(); put = eax; }
+    c = put;
+    if (mask & 0x10) {
+        uint32_t w[17];
+        w[0] = 0x401760;
+        for (i = 0; i < 16; i++) {
+            uint32_t a = t + (uint32_t)m[i] * 16;
+            w[1 + i] = nl_g32(a + 0x1C) + (nl_g32(0x001051D8u + nl_g32(a + 0x14) * 12) << 8);
+        }
+        memcpy((void *)XBOX_PTR(c), w, sizeof w);
+        c += sizeof w;
+    }
+    for (i = 0; i < 16; i++) {
+        uint32_t e = t + (uint32_t)m[i] * 16, s, vb, v;
+        if (nl_g32(e + 0x1C) == 2) continue;
+        s = 0x001051D8u + nl_g32(e + 0x14) * 12;
+        vb = nl_g32(s + 8);
+        if (!vb) continue;
+        v = nl_g32(vb + 4) + nl_g32(e + 0x18) + nl_g32(s + 4);
+        if (base) v = nl_g32(s) * base + nl_g32(vb + 4) + nl_g32(e + 0x18) + nl_g32(s + 4);
+        MEM32(c) = 0x41720 + 4 * i;
+        MEM32(c + 4) = v;
+        c += 8;
+    }
+    MEM32(dev) = c;
+}
+
+static uint64_t s_nf_checked, s_nf_bad;
+void sub_000FE7D0(void)
+{
+    uint32_t dev = ecx, base = MEM32(esp + 4), mask, mode = (uint32_t)nf_mode();
+    if (!mode || !dev) { sub_000FE7D0_gen(); return; }
+    mask = nl_g32(0x00102258u);
+    if (mode == 2 && !(mask & 0x3FFFFF8Fu)) {
+        uint32_t put0 = nl_g32(dev), put1, d20 = nl_g32(dev + 0x20), d20b, mk1, pb[64], ms0 = s_lm_makespace, same = 1;
+        sub_000FE7D0_gen();
+        put1 = nl_g32(dev); d20b = nl_g32(dev + 0x20); mk1 = nl_g32(0x00102258u);
+        if (s_lm_makespace != ms0 || put1 < put0 || put1 - put0 > 256) return;
+        memcpy(pb, (const void *)XBOX_PTR(put0), put1 - put0);
+        MEM32(dev) = put0; MEM32(dev + 0x20) = d20; MEM32(0x00102258u) = mask;
+        MEM32(0x00102258u) = mask & 0xFFFFFFAFu;
+        if (!(mask & 0x40000000u) && ((mask & 0x40) || nl_g32(dev + 0x20) != base))
+            nf_vertex_arrays(dev, mask, base);
+        if (nl_g32(dev) != put1 || nl_g32(dev + 0x20) != d20b || nl_g32(0x00102258u) != mk1) same = 0;
+        if (same && memcmp(pb, (const void *)XBOX_PTR(put0), put1 - put0)) same = 0;
+        s_nf_checked++;
+        if (!same && s_nf_bad++ < 20)
+            fprintf(stderr, "[D3D] native draw flush differs from the lifted code (mask %08X, base %u)\n", mask, base);
+        if ((s_nf_checked & 0x3FFFF) == 0)
+            fprintf(stderr, "[D3D] native draw flush: %llu checked, %llu different\n",
+                    (unsigned long long)s_nf_checked, (unsigned long long)s_nf_bad);
+        return;
+    }
+    MEM32(0x00102258u) = mask & 0xFFFFFFAFu;
+    if (mask & 0x3FFFFF8Fu) {
+        PUSH32(esp, 0x000FE7F8u);
+        sub_000FE750();
+    }
+    if (!(mask & 0x40000000u) && ((mask & 0x40) || nl_g32(dev + 0x20) != base))
+        nf_vertex_arrays(dev, mask, base);
+    esp += 8;                                   /* return address, base vertex (ret 4) */
+}
