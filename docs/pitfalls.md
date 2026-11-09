@@ -180,3 +180,16 @@ the rule.
     MMIO-checked accessor, then hashed byte by byte) cost 8.2% of the main thread against about 10% for the
     original light setup: well under 1 ms saved. Rule: before promising a gain from a cache, time the lookup
     itself against the work it replaces.
+
+34. **Separate movable work from waits before estimating a split.** (Switch test 10c, 2026-11-08.) I counted all
+    samples under the Vulkan driver (about 16% of the graphics thread) as work a recording thread would take
+    away, and estimated the graphics thread at about 15 ms. But part of that 16% was fence waits, swapchain
+    acquire and present, which stay on the renderer; the queue added about 3 to 4% of its own; and with the
+    recording gone, the renderer then waited longer on the GPU fence (8% of its samples, from 3%). The heaviest
+    scenes stayed near 30 fps. Rule: sum only the samples that actually move, subtract the cost of the new
+    mechanism, and measure GPU time before assuming the CPU is the only limit.
+
+35. **Keep to the agreed plan, or say so when changing it.** (2026-11-08.) Mark chose the Direct3D path (native
+    replacements for D3D's entry points, docs/d3d-path.md). After step 1 I moved to trimming the existing
+    NV2A renderer (10b, 10c) without saying that this was a change of direction. The trims helped, but the
+    profile shows Direct3D is still about a third of the main thread's work, untouched.

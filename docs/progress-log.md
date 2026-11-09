@@ -1,5 +1,15 @@
 # Progress log (newest first)
 
+## 2026-11-08: Switch test 10c results
+
+- A shift at 30 to 50 fps (10b: 30 to 47); heaviest scenes still 30. Recording thread works as designed (about
+  5,200 commands a frame, the renderer waits 0.12 ms a frame for it; no visual problems reported).
+- The gain was smaller than estimated (pitfall 34): queue costs about 3 to 4% (qr_commit 2.6%), and the renderer's
+  GPU fence wait rose from 3% to 8% of its samples. Heaviest 10 s windows (30 fps): main about 19 ms, graphics
+  about 20 ms busy per frame.
+- Main thread busy time by kind: game code about 40%, Direct3D (with the light setup) about 31%, XG maths and CRT
+  7%, host 12%.
+
 ## 2026-11-08: Switch test 10b results; test 10c (Vulkan recording on its own thread)
 
 - 10b on the Switch (Mark: noticeable improvements): a shift at 30 to 47 fps (10a: 30 to 36). Graphics thread:
