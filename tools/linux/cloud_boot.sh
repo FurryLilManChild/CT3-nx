@@ -36,7 +36,7 @@ if [ -n "${CLOUD_CPU_AT:-}" ]; then
     snap > "$OUT/t0.txt"; sleep 30; snap > "$OUT/t1.txt"
     join <(sort "$OUT/t0.txt") <(sort "$OUT/t1.txt") | awk -v hz=$(getconf CLK_TCK) '{d=($5-$3)/hz; if (d>0.3) printf "%-8s %-16s %6.1f s  %5.1f%%\n", $1, $2, d, d/30*100}' | sort -k3 -nr > "$OUT/threads.txt" ) &
 fi
-timeout -s INT "$SECS" $PIN xvfb-run -a -s "-screen 0 1280x720x24" "$BIN" > "$OUT/boot.log" 2>&1
+timeout -k 20 -s INT "$SECS" $PIN xvfb-run -a -s "-screen 0 1280x720x24" "$BIN" > "$OUT/boot.log" 2>&1
 wait
 echo "exit $? after up to ${SECS}s; $(ls "$OUT"/f*.bmp 2>/dev/null | wc -l) frames dumped"
 grep -E "\[perf\] [0-9.]+ fps|WATCHDOG|CRASH|deadlock" "$OUT/boot.log" | tail -8

@@ -197,6 +197,8 @@ typedef struct {
     uint32_t        vis_used, vis_nrep;
     float           vis_scale[VK_VIS_QUERIES];
     struct { uint32_t va, q0, q1; double carry; } vis_rep[VK_VIS_REPORTS];
+    VkQueryPool     ts_pool;        /* CT3-nx: GPU time of a frame (two timestamps) */
+    int             ts_valid;
 } Frame;
 
 static Frame  s_fr[VK_FRAMES];
@@ -204,6 +206,10 @@ static Frame *s_f;             /* the frame being recorded */
 static uint32_t s_fi;
 static VkCommandBuffer s_cb;   /* s_f->cb while recording */
 static uint32_t s_cb_gen;      /* bumped at every vkBeginCommandBuffer */
+static float s_ts_period;      /* CT3-nx: ns per timestamp tick */
+static int s_ts_open;           /* this frame's start timestamp is in the current command buffer */
+static double s_gpu_ns, s_gpu_max_ns;
+static uint32_t s_gpu_frames;
 static int s_dyn_valid;
 static int s_pipe_foreign;      /* a pipeline not from pipe_get is bound */
 
@@ -320,6 +326,17 @@ static void frame_begin(void)
     s_vis_q0 = 0;
     s_vis_carry = 0;
     vis_collect(s_f, 0);
+    if (s_f->ts_valid && s_f->ts_pool) {         /* CT3-nx: the GPU time of this slot's last frame */
+        uint64_t ts[2];
+        if (vkGetQueryPoolResults(s_dev, s_f->ts_pool, 0, 2, sizeof ts, ts, 8, VK_QUERY_RESULT_64_BIT) == VK_SUCCESS
+            && ts[1] > ts[0]) {
+            double ns = (double)(ts[1] - ts[0]) * s_ts_period;
+            s_gpu_ns += ns;
+            if (ns > s_gpu_max_ns) s_gpu_max_ns = ns;
+            s_gpu_frames++;
+        }
+    }
+    s_f->ts_valid = 0;
     garbage_free(s_f);
     s_f->ring_off = 0;
     vkResetCommandPool(s_dev, s_f->pool, 0);
@@ -327,6 +344,12 @@ static void frame_begin(void)
     vkBeginCommandBuffer(s_f->cb, &bi);
     if (s_f->vis_pool)
         vkCmdResetQueryPool(s_f->cb, s_f->vis_pool, 0, VK_VIS_QUERIES);
+    s_ts_open = 0;
+    if (s_f->ts_pool) {
+        vkCmdResetQueryPool(s_f->cb, s_f->ts_pool, 0, 2);
+        vkCmdWriteTimestamp(s_f->cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, s_f->ts_pool, 0);
+        s_ts_open = 1;
+    }
     s_cb = s_f->cb;
     s_cb_gen++;
     s_dyn_valid = 0;
@@ -2501,6 +2524,7 @@ static int ready(void)
     fprintf(stderr, "  [VK] %s, Vulkan %u.%u.%u\n", pp.deviceName, VK_API_VERSION_MAJOR(pp.apiVersion),
             VK_API_VERSION_MINOR(pp.apiVersion), VK_API_VERSION_PATCH(pp.apiVersion));
     s_ubo_align = pp.limits.minUniformBufferOffsetAlignment;
+    s_ts_period = pp.limits.timestampPeriod;      /* CT3-nx: GPU frame time */
     s_ubo_range = pp.limits.maxUniformBufferRange;
     {
         const char *e = getenv("RECOMP_GL_SCALE");
@@ -2707,6 +2731,13 @@ static int ready(void)
             if (vkCreateQueryPool(s_dev, &qpi, NULL, &f->vis_pool) != VK_SUCCESS)
                 f->vis_pool = VK_NULL_HANDLE;   /* tests stay incomplete */
         }
+        {
+            VkQueryPoolCreateInfo qpi = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+            qpi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            qpi.queryCount = 2;
+            if (!s_ts_period || vkCreateQueryPool(s_dev, &qpi, NULL, &f->ts_pool) != VK_SUCCESS)
+                f->ts_pool = VK_NULL_HANDLE;
+        }
         bci.size = RING_BYTES;
         bci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
@@ -2760,6 +2791,7 @@ static void flush_frame_wait(void)
     vkWaitForFences(s_dev, 1, &s_f->fence, VK_TRUE, UINT64_MAX);
     vkResetFences(s_dev, 1, &s_f->fence);
     vis_collect(s_f, 1);
+    s_ts_open = 0;                              /* (a frame split in two is not timed) */
     garbage_free(s_f);
     s_f->ring_off = 0;
     vkResetCommandPool(s_dev, s_f->pool, 0);
@@ -4404,6 +4436,11 @@ static void vk_flip(void)
     if (!ready())
         return;
     pend_flush();
+    if (s_ts_open && s_f->ts_pool) {            /* CT3-nx: the frame's drawing ends here */
+        vkCmdWriteTimestamp(s_cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s_f->ts_pool, 1);
+        s_f->ts_valid = 1;
+        s_ts_open = 0;
+    }
     s_frame++;
     if (s_inst_alt)
         s_inst_on = s_frame & 1;
@@ -4418,6 +4455,10 @@ static void vk_flip(void)
             fprintf(stderr, "[vk] per frame: %u draws -> %u draw calls, %u uniform blocks reused, %u descriptor pushes skipped\n",
                     s_st_draws / (s_frame - st_frame), s_st_calls / (s_frame - st_frame),
                     s_st_ubo_reused / (s_frame - st_frame), s_st_push_skipped / (s_frame - st_frame));
+            if (s_gpu_frames)
+                fprintf(stderr, "[vk] GPU time: %.2f ms a frame on average, %.2f ms at most (%u frames timed)\n",
+                        s_gpu_ns / 1e6 / s_gpu_frames, s_gpu_max_ns / 1e6, s_gpu_frames);
+            s_gpu_ns = s_gpu_max_ns = 0; s_gpu_frames = 0;
             s_st_draws = s_st_calls = s_st_inst = s_st_ubo_reused = s_st_push_skipped = 0;
             if (s_qr_on > 0) {
                 fprintf(stderr, "[vk] recording thread: %llu commands a frame, the renderer waited %.2f ms a frame for it (%llu waits), queue full %llu times\n",

@@ -859,11 +859,348 @@ static uint32_t lm_hash(const uint8_t *k, uint32_t n)
     return (uint32_t)(h0 ^ (h0 >> 32));
 }
 
+
+/* ── Direct3D path: the fixed-function light setup in native code ─────────
+ * docs/d3d-path.md, step 3 (entry points by cost). 0x000FE210, D3D's light
+ * setup in the lazy flush (0x000FE7D0 -> 0x000FE750), and its helpers
+ * 0x000FD310, 0x000FDF30, 0x000FDE30, 0x000F9770, 0x000F9A60/0x000F99B0,
+ * 0x000F9740 and 0x000F9710, written from their disassembly as native C.
+ * Switch test 10c profile: the light setup with its memo and helpers was about
+ * 5.5% of the main thread. The x87 parts are done in double precision, in the
+ * x87 code's own order, as the lifted code does with the control word the main
+ * thread uses (precision 53 bits); with any other precision the lifted code
+ * runs instead. The SSE part (0x000F9770) is single precision, never fused.
+ * 0x000FE0D0 (specular power, transcendental helpers) and 0x000F8930 (make
+ * room) are called as lifted code, at the same points as the original.
+ * RECOMP_D3D_NATIVE_LIGHT=0: the memo path as before (RECOMP_LIGHT_MEMO);
+ * =2: the native result is built aside, the lifted code runs, and the two
+ * are compared word for word. */
+extern void sub_000FE0D0(void);
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("fp-contract=off")
+#endif
+
+static inline uint32_t nl_g32(uint32_t a) { uint32_t v; memcpy(&v, (const void *)XBOX_PTR(a), 4); return v; }
+static inline float nl_gf(uint32_t a) { float v; memcpy(&v, (const void *)XBOX_PTR(a), 4); return v; }
+static inline uint32_t nl_fbits(float f) { uint32_t v; memcpy(&v, &f, 4); return v; }
+static inline float nl_bitsf(uint32_t v) { float f; memcpy(&f, &v, 4); return f; }
+
+/* Where the words go: the pushbuffer, or (check mode) a buffer aside that
+ * stands for it; put values stay guest addresses either way. */
+static uint32_t *s_nl_buf, s_nl_base;
+static inline void nl_w(uint32_t a, uint32_t v)
+{
+    if (s_nl_buf) s_nl_buf[(a - s_nl_base) / 4] = v;
+    else memcpy((void *)XBOX_PTR(a), &v, 4);
+}
+static inline void nl_wf(uint32_t a, float f) { nl_w(a, nl_fbits(f)); }
+
+static int s_nl_aside_overflow;
+static uint32_t nl_makeroom(uint32_t ret)
+{
+    if (s_nl_buf) { s_nl_aside_overflow = 1; return nl_g32(nl_g32(0x001051D0u)); }
+    PUSH32(esp, ret);
+    sub_000F8930();
+    return eax;
+}
+
+/* 0x000F9770: out.xyz = v.x*M0 + v.y*M1 + v.z*M2 + w*M3 (SSE, float) */
+static void nl_xform(float o[3], uint32_t v, float w, uint32_t m)
+{
+    float x = nl_gf(v), y = nl_gf(v + 4), z = nl_gf(v + 8);
+    int c;
+    for (c = 0; c < 3; c++) {
+        float p0 = x * nl_gf(m + 4 * c), p1 = y * nl_gf(m + 16 + 4 * c);
+        float p2 = z * nl_gf(m + 32 + 4 * c), p3 = w * nl_gf(m + 48 + 4 * c);
+        float s = p0 + p1;
+        s = s + p2;
+        o[c] = s + p3;
+    }
+}
+
+/* 0x000F99B0: approximate 1/sqrt(f), x87; the result stays unrounded */
+static double nl_rsqrt(float f)
+{
+    uint32_t b = (uint32_t)((int32_t)(0xBE800000u - nl_fbits(f)) >> 1);
+    double c1f = (double)nl_gf(0x00214B38u) * (double)f;
+    double y0 = (double)nl_bitsf(b);
+    double y02 = y0 * y0;
+    double t = y02 * c1f;
+    double d = (double)nl_gf(0x00214B3Cu) - t;
+    double y1 = d * y0;
+    float y1f = (float)y1;
+    double a = (double)nl_bitsf(nl_fbits(y1f) & 0x7FFFFFFFu);
+    double r = a * a;
+    r = r * (double)f;
+    r = (double)nl_gf(0x0012E36Cu) - r;
+    r = r * a;
+    r = r * (double)nl_gf(0x0012AD14u);
+    return r;
+}
+
+/* 0x000F9A60: normalise in place */
+static void nl_norm(float v[3])
+{
+    double x = v[0], y = v[1], z = v[2];
+    double s = x * x;
+    s = s + y * y;
+    s = s + z * z;
+    {
+        double r = nl_rsqrt((float)s);
+        v[0] = (float)(r * x);
+        v[1] = (float)(r * y);
+        v[2] = (float)(r * z);
+    }
+}
+
+/* 0x000FD310: which of the four lights' colour sources come from vertices */
+static uint32_t nl_fd310(void)
+{
+    uint32_t e = 0, c, a;
+    if (!nl_g32(0x001025E0u)) return 0;
+    for (a = 0x001025E4u; a <= 0x00102600u; a += 4)
+        e = (a == 0x001025E4u ? nl_g32(a) : (e << 2) | nl_g32(a));
+    c = nl_g32(nl_g32(nl_g32(0x001051D0u) + 0x380) + 4);
+    if (!(c & 0x400)) e &= 0xFFFFFFAAu;
+    if (!(c & 0x800)) e &= 0xFFFFFF55u;
+    if (!(c & 0x1000)) e &= 0xFFFFAAFFu;
+    if (!(c & 0x2000)) e &= 0xFFFF55FFu;
+    return e;
+}
+
+/* 0x000FDF30: scene ambient and emissive, front (and back) */
+static uint32_t nl_fdf30(uint32_t out, uint32_t mask)
+{
+    uint32_t dev = nl_g32(0x001051D0u), sides = nl_g32(0x0010264Cu);
+    uint32_t col = nl_g32(0x00102608u), mat = dev + 0x9F0;
+    double k = nl_gf(0x0012E540u);
+    nl_w(out, 0xC0A10); nl_w(out + 0x10, 0xC03A8); nl_w(out + 0x20, 0x403B4);
+    for (;;) {
+        double R = (double)(int32_t)((col >> 16) & 0xFF) * k;
+        double G = (double)(int32_t)((col >> 8) & 0xFF) * k;
+        float Gf = (float)G;
+        float Bf = (float)((double)(int32_t)(col & 0xFF) * k);
+        float l10, l14, l18;
+        double o4, o8;
+        float oc;
+        if (mask & 0xC) {
+            l10 = (float)R; l14 = Gf; l18 = Bf;
+            o4 = nl_gf(mat + 0x30); o8 = nl_gf(mat + 0x34); oc = nl_gf(mat + 0x38);
+        } else if (mask & 3) {
+            o4 = R * (double)nl_gf(mat + 0x10);
+            o8 = (double)Gf * (double)nl_gf(mat + 0x14);
+            oc = (float)((double)Bf * (double)nl_gf(mat + 0x18));
+            l10 = l14 = l18 = 1.0f;
+        } else {
+            o4 = R * (double)nl_gf(mat + 0x10) + (double)nl_gf(mat + 0x30);
+            o8 = (double)Gf * (double)nl_gf(mat + 0x14) + (double)nl_gf(mat + 0x34);
+            oc = (float)((double)Bf * (double)nl_gf(mat + 0x18) + (double)nl_gf(mat + 0x38));
+            l10 = l14 = l18 = 0.0f;
+        }
+        nl_wf(out + 0xC, oc);
+        nl_wf(out + 4, (float)o4);
+        nl_wf(out + 0x14, l10);
+        nl_wf(out + 8, (float)o8);
+        nl_wf(out + 0x18, l14);
+        nl_wf(out + 0x1C, l18);
+        nl_w(out + 0x24, nl_g32(mat + 0xC));
+        out += 0x28;
+        if (!sides) break;
+        sides--;
+        col = nl_g32(0x00102604u);
+        nl_w(out, 0xC17A0); nl_w(out + 0x10, 0xC17B0);
+        mask >>= 8;
+        mat = dev + 0xA34;
+        nl_w(out + 0x20, 0x417AC);
+    }
+    return out;
+}
+
+/* 0x000FDE30: one light's colours times the material, front (and back) */
+static uint32_t nl_fde30(uint32_t out, uint32_t lt, uint32_t idx, uint32_t mask)
+{
+    uint32_t dev = nl_g32(0x001051D0u), sides = nl_g32(0x0010264Cu), mat = dev + 0x9F0;
+    nl_w(out, (idx + 0x4820) << 7);
+    for (;;) {
+        int i;
+        for (i = 0; i < 3; i++)
+            nl_w(out + 4 + 4 * i, (mask & 0xC) ? nl_g32(lt + 0x24 + 4 * i)
+                 : nl_fbits((float)((double)nl_gf(mat + 0x10 + 4 * i) * (double)nl_gf(lt + 0x24 + 4 * i))));
+        for (i = 0; i < 3; i++)
+            nl_w(out + 0x10 + 4 * i, (mask & 0x30) ? nl_g32(lt + 4 + 4 * i)
+                 : nl_fbits((float)((double)nl_gf(lt + 4 + 4 * i) * (double)nl_gf(mat + 4 * i))));
+        for (i = 0; i < 3; i++)
+            nl_w(out + 0x1C + 4 * i, (mask & 0xC0) ? nl_g32(lt + 0x14 + 4 * i)
+                 : nl_fbits((float)((double)nl_gf(mat + 0x20 + 4 * i) * (double)nl_gf(lt + 0x14 + 4 * i))));
+        out += 0x28;
+        if (!sides) break;
+        sides--;
+        nl_w(out, (idx + 0x9030) << 6);
+        mask >>= 8;
+        mat = dev + 0xA34;
+    }
+    return out;
+}
+
+/* 0x000FE210 itself. Returns 0 when the lifted code must run instead. */
+static int nl_light(uint32_t dev)
+{
+    uint32_t spec, t, put, edx, maskv, esi, lt, idx, bits = 0, ldx;
+    t = nl_g32(dev + 0x380);
+    spec = (nl_g32(0x001025D8u) != 0 || (nl_g32(dev + 8) & 0x40)) ? 1 : 0;
+    if ((nl_g32(t + 4) & 0x12) || !nl_g32(0x001025D4u) || (nl_g32(dev + 0x2018) & ~0x10u) == 1) {
+        put = nl_g32(dev);
+        if (put >= nl_g32(dev + 4)) put = nl_makeroom(0x000FE50Bu);
+        nl_w(put, 0x40314); nl_w(put + 4, 0); nl_w(put + 8, 0x403B8); nl_w(put + 0xC, spec);
+        nl_w(put + 0x10, 0x40294); nl_w(put + 0x14, 0x20001);
+        nl_w(put + 0x18, 0x417C4); nl_w(put + 0x1C, nl_g32(0x0010264Cu));
+        if (!s_nl_buf) { MEM32(dev) = put + 0x20; eax = put + 0x20; }
+        return 1;
+    }
+    put = nl_g32(dev);
+    if (put >= nl_g32(dev + 4)) put = nl_makeroom(0x000FE26Eu);
+    edx = put;
+    esi = 1;
+    if (spec) {
+        if (nl_g32(0x001025DCu) && nl_g32(dev + 0x398)) esi = 0x10001;
+        if (s_nl_buf) return 0;                 /* (check mode: the lifted helper writes the pushbuffer) */
+        PUSH32(esp, put);
+        PUSH32(esp, 0x000FE295u);
+        sub_000FE0D0();
+        edx = eax;
+    }
+    nl_w(edx, 0x40294); nl_w(edx + 4, esi); nl_w(edx + 8, 0x40314); nl_w(edx + 0xC, 1);
+    nl_w(edx + 0x10, 0x417C4); nl_w(edx + 0x14, nl_g32(0x0010264Cu));
+    nl_w(edx + 0x18, 0x403B8); nl_w(edx + 0x1C, 1);
+    maskv = nl_fd310();
+    nl_w(edx + 0x20, 0x40298); nl_w(edx + 0x24, maskv);
+    esi = nl_fdf30(edx + 0x28, maskv);
+    lt = nl_g32(dev + 0x398);
+    for (idx = 0, ldx = 0x41024; lt; ) {
+        float a[3], b[3];
+        if (!s_nl_buf) MEM32(dev) = esi;
+        if (esi >= nl_g32(dev + 4)) esi = nl_makeroom(0x000FE312u);
+        esi = nl_fde30(esi, lt, idx, maskv);
+        if (nl_g32(lt) == 3) {                  /* directional */
+            bits |= 1u << (idx * 2);
+            nl_xform(a, lt + 0x6C, 0.0f, dev + 0x750);
+            nl_norm(a);
+            {
+                int i;
+                for (i = 0; i < 3; i++)
+                    b[i] = (float)((double)a[i] + (double)nl_gf(0x00102170u + 4 * i));
+            }
+            nl_norm(b);
+            nl_w(esi, ldx); nl_w(esi + 4, 0x7149F2CA); nl_w(esi + 8, ldx + 0x140004);
+            nl_wf(esi + 0xC, b[0]); nl_wf(esi + 0x10, b[1]); nl_wf(esi + 0x14, b[2]);
+            nl_wf(esi + 0x18, a[0]); nl_wf(esi + 0x1C, a[1]); nl_wf(esi + 0x20, a[2]);
+            esi += 0x24;
+        } else {
+            float p[3];
+            nl_wf(esi + 4, (float)(double)nl_gf(lt + 0x4C));
+            nl_w(esi, ldx);
+            nl_xform(p, lt + 0x34, 1.0f, dev + 0x750);
+            nl_w(esi + 8, ldx + 0x140038);
+            nl_wf(esi + 0xC, p[0]); nl_wf(esi + 0x10, p[1]); nl_wf(esi + 0x14, p[2]);
+            nl_w(esi + 0x18, nl_g32(lt + 0x54)); nl_w(esi + 0x1C, nl_g32(lt + 0x58));
+            nl_w(esi + 0x20, nl_g32(lt + 0x5C));
+            esi += 0x24;
+            if (nl_g32(lt) == 1) {              /* point */
+                bits |= 2u << (idx * 2);
+            } else {                            /* spot */
+                double s;
+                int i;
+                bits |= 3u << (idx * 2);
+                nl_xform(a, lt + 0x6C, 0.0f, dev + 0x750);
+                nl_norm(a);
+                s = nl_gf(lt + 0x84);
+                for (i = 0; i < 3; i++) a[i] = (float)(s * (double)a[i]);
+                nl_w(esi, ldx + 0x18001C);
+                nl_w(esi + 4, nl_g32(lt + 0x78)); nl_w(esi + 8, nl_g32(lt + 0x7C));
+                nl_w(esi + 0xC, nl_g32(lt + 0x80));
+                nl_wf(esi + 0x10, a[0]); nl_wf(esi + 0x14, a[1]); nl_wf(esi + 0x18, a[2]);
+                nl_w(esi + 0x1C, nl_g32(lt + 0x88));
+                esi += 0x20;
+            }
+        }
+        ldx += 0x80;
+        idx++;
+        if (ldx == 0x41424) break;
+        lt = nl_g32(lt + 0x8C);
+    }
+    nl_w(esi, 0x403BC); nl_w(esi + 4, bits);
+    esi += 8;
+    if (!s_nl_buf) { MEM32(dev) = esi; eax = esi; }
+    else s_nl_base = esi;                       /* (check mode: where it ended) */
+    return 1;
+}
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
+
+static int nl_mode(void)
+{
+    static int m = -1;
+    if (m < 0) { const char *e = getenv("RECOMP_D3D_NATIVE_LIGHT"); m = e && *e ? *e - '0' : 1; }
+    return m;
+}
+static uint64_t s_nl_calls, s_nl_lifted, s_nl_checked, s_nl_bad;
+
+/* Called first by sub_000FE210; returns 1 when it handled the call. */
+static int nl_entry(uint32_t dev)
+{
+    int m = nl_mode();
+    if (!m || !dev) return 0;
+    if (((s_nl_calls + s_nl_checked + s_nl_lifted) & 0x3FFFF) == 0x3FFFF)
+        fprintf(stderr, "[D3D] native light setup: %llu calls native, %llu checked (%llu different), %llu left to the lifted code\n",
+                (unsigned long long)s_nl_calls, (unsigned long long)s_nl_checked,
+                (unsigned long long)s_nl_bad, (unsigned long long)s_nl_lifted);
+    if ((recomp_fpcw_ld() & 0x300u) == 0) { s_nl_lifted++; return 0; }   /* single precision: lifted */
+    if (m == 1) {
+        if (!nl_light(dev)) return 0;
+        esp += 8;                               /* return address, dev (ret 4) */
+        s_nl_calls++;
+        return 1;
+    }
+    {   /* check: aside, then the lifted code, then compare */
+        static uint32_t aside[1024];
+        uint32_t put0 = nl_g32(dev), end_aside, put1, n, i, ok;
+        s_nl_buf = aside; s_nl_base = put0; s_nl_aside_overflow = 0;
+        memset(aside, 0, sizeof aside);
+        ok = (uint32_t)nl_light(dev);
+        end_aside = s_nl_base;
+        s_nl_buf = NULL;
+        {
+            uint32_t ms0 = s_lm_makespace;
+            sub_000FE210_gen();
+            put1 = MEM32(dev);
+            if (!ok || s_nl_aside_overflow || s_lm_makespace != ms0) { s_nl_lifted++; return 1; }
+        }
+        /* the "disabled" path leaves s_nl_base at put0: its length is 8 words */
+        n = (end_aside == put0) ? 8 : (end_aside - put0) / 4;
+        s_nl_checked++;
+        if (put1 - put0 != 4 * n || n > 1024) {
+            if (s_nl_bad++ < 20)
+                fprintf(stderr, "[D3D] native light setup: %u words, the lifted code wrote %u\n", n, (put1 - put0) / 4);
+            return 1;
+        }
+        for (i = 0; i < n; i++)
+            if (aside[i] != MEM32(XBOX_DEV_FOLD(put0 + 4 * i))) break;
+        if (i < n && s_nl_bad++ < 20)
+            fprintf(stderr, "[D3D] native light setup differs at word %u of %u: native %08X, lifted %08X (word before %08X)\n",
+                    i, n, aside[i], MEM32(XBOX_DEV_FOLD(put0 + 4 * i)), i ? aside[i - 1] : 0);
+        return 1;
+    }
+}
+
 void sub_000FE210(void)
 {
     uint32_t dev = MEM32(esp + 4), n = 0, l, k, put0, put1, mode = (uint32_t)lm_mode();
     int hit;
 
+    if (nl_entry(dev)) return;                  /* the native light setup (above) */
     if (!mode || !dev) { sub_000FE210_gen(); return; }
     /* D3D globals read by it and its helpers: 0x00102170 (0x000FE210),
      * 0x001025D4-0x0010260B (0x000FE210, 0x000FD310, 0x000FDF30),
@@ -1110,4 +1447,138 @@ void sub_000E4EB9(void)
     eax = out;
     ecx = out;
     esp += 16;
+}
+
+/* ── Direct3D path: SetTexture (0x000F61D0) in native code ────────────────
+ * docs/d3d-path.md step 3. 0x000F61D0(stage, texture), stdcall: the game's
+ * SetTexture (12 callers, e.g. 0x000A49E0, 0x000A6040). Switch test 10c
+ * profile: 1.7% of the main thread, the costliest D3D call after the light
+ * setup. Integer work only: the stage's texture slot (dev+0xA78), the
+ * texture's use count (+0, in steps of 0x80000) and fence (+8, from dev+0x30),
+ * the NV2A texture offset/format/control words (0x1B00 + 64*stage ...), the
+ * stage's format cache (dev+0xC) and D3D's dirty mask (0x00102258).
+ * 0x000F4C00 (frees a texture whose count reaches zero) and 0x000F8930 (make
+ * room) are called as lifted code at the same points.
+ * RECOMP_D3D_NATIVE_TEX=0: the lifted code; =2: both run on the same state and
+ * every word they write is compared (the native result is the one kept). */
+extern void sub_000F61D0_gen(void);
+extern void sub_000F4C00(void);
+
+static uint32_t *s_nt_buf, s_nt_base;     /* check mode: pushbuffer words go aside */
+static int s_nt_overflow;
+static inline void nt_w(uint32_t a, uint32_t v)
+{
+    if (s_nt_buf && a >= s_nt_base && a < s_nt_base + 256) { s_nt_buf[(a - s_nt_base) / 4] = v; return; }
+    memcpy((void *)XBOX_PTR(a), &v, 4);
+}
+
+static void nt_settexture(uint32_t stage, uint32_t tex, uint32_t ret_base)
+{
+    uint32_t dev = nl_g32(0x001051D0u), old = nl_g32(dev + stage * 4 + 0xA78), put, p, c, fmt;
+    (void)ret_base;
+    if (old) {
+        uint32_t v = nl_g32(old) + 0xFFF80000u;
+        nt_w(old + 8, nl_g32(dev + 0x30));
+        nt_w(old, v);
+        if (!(v & 0x78FFFFu)) {
+            PUSH32(esp, old);
+            PUSH32(esp, 0x000F6213u);
+            sub_000F4C00();
+        }
+    }
+    nt_w(dev + stage * 4 + 0xA78, tex);
+    put = nl_g32(dev);
+    if (!tex) {
+        if (put >= nl_g32(dev + 4)) {
+            if (s_nt_buf) { s_nt_overflow = 1; return; }
+            PUSH32(esp, 0x000F622Eu); sub_000F8930(); put = eax;
+        }
+        nt_w(put, (stage << 6) + 0x41B0C);
+        nt_w(put + 4, 0);
+        nt_w(dev, put + 8);
+        nt_w(dev + stage * 4 + 0xC, 0xFFFFFFFFu);
+        nt_w(0x00102258u, nl_g32(0x00102258u) | 0x4800);
+        return;
+    }
+    nt_w(tex, nl_g32(tex) + 0x80000);
+    if (put >= nl_g32(dev + 4)) {
+        if (s_nt_buf) { s_nt_overflow = 1; return; }
+        PUSH32(esp, 0x000F6279u); sub_000F8930(); put = eax;
+    }
+    nt_w(put, (stage + 0x206C) << 6);
+    nt_w(put + 4, nl_g32(tex + 4));
+    nt_w(put + 8, nl_g32(tex + 0xC));
+    p = put + 0xC;
+    c = nl_g32(tex + 0x10);
+    if (c) {
+        uint32_t w = (c & 0xFFF) + 1, h = ((c >> 12) & 0xFFF) + 1;
+        uint32_t pitch = (uint32_t)(*(const uint8_t *)XBOX_PTR(tex + 0x13)) + 1;
+        nt_w(p, (stage << 6) + 0x41B10);
+        nt_w(p + 4, (pitch << 6) << 16);
+        nt_w(p + 8, (stage << 6) + 0x41B1C);
+        nt_w(p + 0xC, (w << 16) | h);
+        p += 0x10;
+    }
+    fmt = nl_g32(tex + 0xC) & 0xF4;
+    if (nl_g32(dev + stage * 4 + 0xC) != fmt) {
+        nt_w(dev + stage * 4 + 0xC, fmt);
+        nt_w(0x00102258u, nl_g32(0x00102258u) | 0x4000);
+        if (!old) {
+            nt_w(p, (stage << 6) + 0x41B0C);
+            nt_w(p + 4, nl_g32(dev + stage * 4 + 0x360));
+            p += 8;
+            nt_w(0x00102258u, nl_g32(0x00102258u) | 0x800);
+        }
+    }
+    nt_w(dev, p);
+}
+
+static uint64_t s_nt_calls, s_nt_checked, s_nt_bad, s_nt_skip;
+void sub_000F61D0(void)
+{
+    static int m = -1;
+    uint32_t stage = MEM32(esp + 4), tex = MEM32(esp + 8), dev;
+    if (m < 0) { const char *e = getenv("RECOMP_D3D_NATIVE_TEX"); m = e && *e ? *e - '0' : 1; }
+    if (!m || stage >= 4) { sub_000F61D0_gen(); return; }
+    dev = nl_g32(0x001051D0u);
+    if (m == 2) {
+        /* every word either may touch, before; the lifted code; its words;
+         * the words back; the native code; compare */
+        uint32_t old = nl_g32(dev + stage * 4 + 0xA78), put0 = nl_g32(dev);
+        uint32_t addr[12], before[12], lifted[12], pb_l[64], n = 0, i, put1, ms0 = s_lm_makespace;
+        int same = 1;
+        addr[n++] = dev; addr[n++] = dev + stage * 4 + 0xA78; addr[n++] = dev + stage * 4 + 0xC;
+        addr[n++] = 0x00102258u;
+        if (old) { addr[n++] = old; addr[n++] = old + 8; }
+        if (tex) addr[n++] = tex;
+        for (i = 0; i < n; i++) before[i] = nl_g32(addr[i]);
+        if (old && !((nl_g32(old) + 0xFFF80000u) & 0x78FFFFu)) {   /* frees a texture: no second run */
+            sub_000F61D0_gen(); s_nt_skip++; return;
+        }
+        {
+            uint32_t sp = esp;
+            sub_000F61D0_gen();
+            (void)sp;
+        }
+        put1 = nl_g32(dev);
+        if (s_lm_makespace != ms0 || put1 < put0 || put1 - put0 > 256) { s_nt_skip++; return; }
+        for (i = 0; i < n; i++) lifted[i] = nl_g32(addr[i]);
+        for (i = 0; i < (put1 - put0) / 4; i++) pb_l[i] = nl_g32(put0 + 4 * i);
+        for (i = 0; i < n; i++) memcpy((void *)XBOX_PTR(addr[i]), &before[i], 4);
+        nt_settexture(stage, tex, 0);
+        s_nt_checked++;
+        if (nl_g32(dev) != put1) same = 0;
+        for (i = 0; same && i < n; i++) if (nl_g32(addr[i]) != lifted[i]) same = 0;
+        for (i = 0; same && i < (put1 - put0) / 4; i++) if (nl_g32(put0 + 4 * i) != pb_l[i]) same = 0;
+        if (!same && s_nt_bad++ < 20)
+            fprintf(stderr, "[D3D] native SetTexture(%u, %08X) differs from the lifted code (put %08X->%08X, native end %08X)\n",
+                    stage, tex, put0, put1, nl_g32(dev));
+        if ((s_nt_checked & 0xFFFF) == 0)
+            fprintf(stderr, "[D3D] native SetTexture: %llu checked, %llu different, %llu not checked\n",
+                    (unsigned long long)s_nt_checked, (unsigned long long)s_nt_bad, (unsigned long long)s_nt_skip);
+        return;                                 /* (the lifted code already popped its arguments) */
+    }
+    nt_settexture(stage, tex, 0);
+    esp += 12;                                  /* return address, stage, texture (ret 8) */
+    s_nt_calls++;
 }

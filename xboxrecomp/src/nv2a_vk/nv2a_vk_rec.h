@@ -58,7 +58,7 @@ enum {
     QC_STENCIL_WRITE, QC_STENCIL_CMP, QC_STENCIL_REF, QC_BLEND_CONST, QC_END_QUERY, QC_BEGIN_QUERY,
     QC_COPY_I2B, QC_CLEAR_DS, QC_CLEAR_ATT, QC_PUSH_DESC, QC_VERTEX_INPUT, QC_BEGIN_RENDER,
     QC_END_RENDER, QC_CULL, QC_FRONT, QC_TOPO, QC_DEPTH_TEST, QC_DEPTH_WRITE, QC_DEPTH_OP,
-    QC_STENCIL_TEST, QC_STENCIL_OP
+    QC_STENCIL_TEST, QC_STENCIL_OP, QC_TIMESTAMP
 };
 
 typedef struct { uint32_t id, size; VkCommandBuffer cb; } QHdr;
@@ -511,6 +511,16 @@ static void q_begin_rendering(VkCommandBuffer cb, const VkRenderingInfo *ri)
     qr_commit(q);
 }
 
+typedef struct { QHdr h; VkPipelineStageFlagBits st; VkQueryPool p; uint32_t q; } QTimestamp;
+static void q_vkCmdWriteTimestamp(VkCommandBuffer cb, VkPipelineStageFlagBits st, VkQueryPool p, uint32_t q)
+{
+    QTimestamp *c;
+    if (!qr_on()) { vkCmdWriteTimestamp(cb, st, p, q); return; }
+    c = (QTimestamp *)qr_alloc(QC_TIMESTAMP, sizeof *c, cb);
+    c->st = st; c->p = p; c->q = q;
+    qr_commit(c);
+}
+
 /* The recorder: each command made exactly as it was asked for. */
 static void qr_exec(const QHdr *h)
 {
@@ -562,6 +572,7 @@ static void qr_exec(const QHdr *h)
         p_push_desc(cb, q->bp, q->l, q->set, q->n, q->w); break; }
     case QC_VERTEX_INPUT: { const QVtxIn *q = (const QVtxIn *)h; p_vertex_input(cb, q->nb, q->b, q->na, q->a); break; }
     case QC_BEGIN_RENDER: { const QBeginRender *q = (const QBeginRender *)h; p_begin_rendering(cb, &q->ri); break; }
+    case QC_TIMESTAMP: { const QTimestamp *q = (const QTimestamp *)h; vkCmdWriteTimestamp(cb, q->st, q->p, q->q); break; }
     default:
         fprintf(stderr, "  [VK] recorder: unknown command %u\n", h->id);
         break;
@@ -591,6 +602,7 @@ static void qr_exec(const QHdr *h)
 #define vkCmdSetStencilCompareMask(...)  q_vkCmdSetStencilCompareMask(__VA_ARGS__)
 #define vkCmdSetStencilReference(...)    q_vkCmdSetStencilReference(__VA_ARGS__)
 #define vkCmdSetBlendConstants(...)      q_vkCmdSetBlendConstants(__VA_ARGS__)
+#define vkCmdWriteTimestamp(...)         q_vkCmdWriteTimestamp(__VA_ARGS__)
 #define p_push_desc(...)                 q_push_desc(__VA_ARGS__)
 #define p_vertex_input(...)              q_vertex_input(__VA_ARGS__)
 #define p_begin_rendering(...)           q_begin_rendering(__VA_ARGS__)
