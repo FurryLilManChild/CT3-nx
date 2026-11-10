@@ -43,8 +43,10 @@ extern uint32_t xbox_GetConnectedInterrupt(uint32_t vector);
 #else
 #  define OHCI_TLS __thread
 #endif
+#ifndef XBOX_GUEST_REGS_IN_CPU   /* else CPU registers (xbox_guest_regs.h) */
 extern OHCI_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
 extern OHCI_TLS uint32_t g_ebx, g_esi, g_edi;
+#endif
 extern OHCI_TLS uint32_t g_fs_base;
 extern uint32_t xbox_AllocThreadTib(void);
 

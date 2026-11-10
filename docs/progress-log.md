@@ -1,5 +1,16 @@
 # Progress log (newest first)
 
+## 2026-11-09: Strategy 1, guest registers in CPU registers (Switch test 12a)
+
+- xboxrecomp/src/kernel/xbox_guest_regs.h/.c (after OpenTrickyNX, MIT): eax..esp in w19-w25, the x87 stack top in
+  w27, the x87 stack and control word, ebp, the SEH frame, SSE and MMX registers in xbox_gtls through x26.
+  Force-included into every C file of the Switch build (NFSU2_GUEST_REGS, default ON on the Switch only). Thread
+  entries that may run guest code go through xbox_guest_regs_call (CreateThread, timers, thread pool, the game
+  thread). The translator's registers-in-locals code is wrapped in RECOMP_RL(), empty in this mode.
+- Checks: the cloud Linux build (thread-local mode) builds; a qemu-aarch64 test of the mechanism (four threads,
+  libc calls) passes and shows the known limit (a library callback into our code sees the library's registers).
+- Switch ELF: __aarch64_read_tp call sites 36,820 (11a) to 390; the NRO 39.3 to 37.1 MB.
+
 ## 2026-11-09: Switch test 11a results; strategy review of the other Xbox Switch ports
 
 - 11a: looks right (Mark). A shift at 33 to 50 fps (10c: 30 to 50). GPU time 7.5 to 9.9 ms a frame on average,
