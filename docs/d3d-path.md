@@ -77,3 +77,20 @@ scenes: main thread about 15.7 ms (three quarters of it lifted code), graphics t
    FIFA Street at 60 fps): the game's D3D8 functions replaced as a whole by native ones that keep the state and
    feed the renderer directly, with no NV2A command stream to encode on the main thread or decode on the graphics
    thread. This completes the entry-point migration above in one piece, and is what the graphics thread needs.
+
+## Resume here: Strategy 2 (waiting for Mark's go, 2026-11-09)
+
+State at 12a: graphics thread about 19.6 ms busy in the heaviest frames (draw preparation 63%, NV2A command
+stream reading 28%, Vulkan queueing 8%), main thread about 16.3 ms, GPU 12.1 ms at most.
+
+1. Map the game's Direct3D layer: the 59 D3D entry points called from outside the D3D section (xrefs.json) and
+   the XDK 4531 layouts (device, resources, vertex buffers, textures), with TGP482/XboxXBE-Recomp as the reference
+   (MIT; runtime/xdk/d3d8.cpp, runtime/gpu/, xdk/4831/layout.toml as the nearest XDK). Native already, with the
+   lifted code as fallback: the light setup, SetTexture, sampler state, matrix copy, SetMaterial, SetPixelShader,
+   the flush dispatcher and the per-draw flush (src/recomp_manual.c, RECOMP_D3D_NATIVE_*).
+2. A native D3D state block and draw path: the draw calls hand the renderer a draw with its D3D state (dirty
+   tracked) instead of NV2A methods; the renderer's Vulkan pieces (pipelines, shaders, texture cache, recording
+   thread) are reused.
+3. Move the setters over by category until nothing writes NV2A commands; the pushbuffer reader stays as the
+   fallback. Each stage: cloud frame comparison against the current path, a switch back, Switch builds at
+   measurable points.
