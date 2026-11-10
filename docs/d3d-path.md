@@ -61,3 +61,19 @@ First identification from the NV2A methods each writes (tools: scratch d3dmap.py
 
 Later, independent of this: the graphics thread's per-draw work (cached uniform blocks, fewer descriptor
 writes) and, if needed, a second graphics thread.
+
+## The plan from 2026-11-09 (Mark's choice after the review of other Xbox Switch ports)
+
+Switch test 11a: the GPU needs 7.5 to 9.9 ms a frame (12.1 at most), so 60 fps is a CPU question. Heaviest
+scenes: main thread about 15.7 ms (three quarters of it lifted code), graphics thread about 17.8 ms.
+
+1. Strategy 1, guest registers in CPU registers (in progress). As OpenTrickyNX (SSX Tricky, 60 fps, same
+   toolkit): g_eax..g_esp are GCC global register variables in w19-w25, the x87 stack top in w27, and the rest of
+   the per-thread guest state (x87 stack and control word, ebp, the SEH frame, SSE and MMX registers) in one
+   struct reached through x26 (xboxrecomp/src/kernel/xbox_guest_regs.h). Our translator already kept registers
+   in C locals inside a function; what goes is the store and reload of all of them around every call, and the
+   thread-pointer calls. Estimate: lifted code 1.25 to 1.4 times faster, main thread about 13 ms in heavy scenes.
+2. Strategy 2, Direct3D replaced at the API level (next). As TGP482/XboxXBE-Recomp (MIT; Black, Shaolin Monks,
+   FIFA Street at 60 fps): the game's D3D8 functions replaced as a whole by native ones that keep the state and
+   feed the renderer directly, with no NV2A command stream to encode on the main thread or decode on the graphics
+   thread. This completes the entry-point migration above in one piece, and is what the graphics thread needs.

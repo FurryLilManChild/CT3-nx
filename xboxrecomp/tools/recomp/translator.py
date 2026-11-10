@@ -485,6 +485,12 @@ def _localize_registers(lines):
         spill = " ".join(f"recomp_leaf_st_{r}(g_{r});" for r in used)
         reload = " ".join(f"g_{r} = recomp_leaf_ld_{r}();" for r in used)
         decl = " ".join(f"uint32_t g_{r} = recomp_leaf_ld_{r}();" for r in used)
+    # CT3-nx: RECOMP_RL() keeps all of it out of a build whose guest
+    # registers are CPU registers already (XBOX_GUEST_REGS, recomp_types.h),
+    # so one generated tree serves both.
+    decl = f"RECOMP_RL({decl})"
+    spill = f"RECOMP_RL({spill})"
+    reload = f"RECOMP_RL({reload})"
     out = lines[:at + 1]
     out.append("    " + decl + " /* registers in locals */")
     for l in body:

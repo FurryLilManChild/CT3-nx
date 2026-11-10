@@ -18,8 +18,12 @@
 
 #include "xbox_memory_layout.h"
 
+#ifndef XBOX_GUEST_REGS_IN_CPU
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
+#endif
+#ifndef XBOX_GUEST_REGS_IN_CPU
 extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi;
+#endif
 
 /* A run that recurses produces trace lines without limit, and the useful
  * window is rarely the first few thousand. The budget stops a diagnostic from

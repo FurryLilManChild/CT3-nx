@@ -40,6 +40,19 @@ endif()
 option(NFSU2_VULKAN "Render with Vulkan instead of OpenGL" OFF)
 set(XBOXRECOMP_VULKAN ${NFSU2_VULKAN} CACHE BOOL "" FORCE)
 
+# CT3-nx (2026-11-09, Strategy 1): the guest x86 registers in the Switch CPU's
+# own registers instead of thread-local memory (xboxrecomp/src/kernel/
+# xbox_guest_regs.h, after OpenTrickyNX). Every C file of the program, the
+# toolkit's included, sees the header first, so none of our code uses those
+# registers for anything else. GCC on AArch64 only; elsewhere the header does
+# nothing. -DNFSU2_GUEST_REGS=OFF keeps them in thread-local memory.
+if(NINTENDO_SWITCH)
+    option(NFSU2_GUEST_REGS "Guest x86 registers in host CPU registers" ON)
+    if(NFSU2_GUEST_REGS)
+        add_compile_definitions(XBOX_GUEST_REGS=1)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C>:SHELL:-include ${XBOXRECOMP_DIR}/src/kernel/xbox_guest_regs.h>")
+    endif()
+endif()
 add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
 file(GLOB RECOMP_GEN_SOURCES CONFIGURE_DEPENDS "${NFSU2_GEN_DIR}/*.c")

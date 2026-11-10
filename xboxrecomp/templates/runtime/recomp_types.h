@@ -164,18 +164,45 @@ extern uint32_t g_xbox_code_hi;
 #  define RECOMP_TLS _Thread_local
 #endif
 
+/* CT3-nx: with XBOX_GUEST_REGS the guest registers live in CPU registers and
+ * the rest of the per-thread guest state in xbox_gtls (xbox_guest_regs.h,
+ * force-included); the translated code reaches xbox_gtls through x26, which
+ * every thread that runs guest code has set (xbox_guest_regs_call). */
+#if defined(XBOX_GUEST_REGS_IN_CPU) && defined(RECOMP_GENERATED_CODE)
+#undef XBOX_GTLS
+#define XBOX_GTLS g_xbox_gtls
+/* The translator declares these two as locals of each x87 function
+ * (_localize_x87_stack), from recomp_fp_base() and recomp_fpcw_ld(). */
+#undef g_fp_stack
+#undef g_fp_control_word
+#endif
+/* The translator's "registers in locals" (translator.py _localize_registers):
+ * with the registers in CPU registers there is nothing to keep in locals. */
+#ifdef XBOX_GUEST_REGS_IN_CPU
+#define RECOMP_RL(...)
+#else
+#define RECOMP_RL(...) __VA_ARGS__
+#endif
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
 extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi;
+#endif
 
 /* x87 stack. Per-thread for the same reason the integer registers are:
  * arguments are passed in st(0)/st(1) across call boundaries. */
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS double g_fp_stack[8];
 extern RECOMP_TLS int g_fp_top;
+#endif
 
 /* A function whose x87 top index lives in a local (the translator's
  * _localize_x87_stack) takes this thread's stack once, and loads and stores
  * the index around everything that can run other lifted code. */
+#ifdef XBOX_GUEST_REGS_IN_CPU
+static inline double *recomp_fp_base(void) { return XBOX_GTLS->fp_stack; }
+#else
 static inline double *recomp_fp_base(void) { return g_fp_stack; }
+#endif
 static inline int recomp_fp_top_ld(void) { return g_fp_top; }
 static inline void recomp_fp_top_st(int top) { g_fp_top = top; }
 
@@ -198,7 +225,9 @@ static inline void recomp_fp_top_st(int top) { g_fp_top = top; }
 extern RECOMP_TLS uint32_t g_fs_base;
 #define XBOX_FS_BASE g_fs_base
 
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS uint32_t g_seh_ebp;
+#endif
 
 /* ---- non-local jumps (setjmp / longjmp) --------------------------------
  *
@@ -322,7 +351,9 @@ static inline void recomp_spin_hint(void)
 #include <setjmp.h>
 jmp_buf *recomp_setjmp_slot(uint32_t buf_va);
 int recomp_guest_longjmp(uint32_t buf_va, uint32_t value);
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS uint32_t g_ebp;
+#endif
 
 /* EFLAGS.DF, and the signed step the string instructions take because of it.
  *
@@ -336,20 +367,34 @@ extern RECOMP_TLS uint32_t g_ebp;
  * be found by name, and the dashboard rebooted rather than showing a UI.
  * memmove's overlapping case is the same instruction and the same bug.
  */
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS int g_df;
+#endif
 #define RECOMP_DF_STEP(n) (g_df ? -(int32_t)(n) : (int32_t)(n))
 
 /* x87 control and status. Thread-local for the same reason the x87 stack
    above is: one guest routine can lift to several C functions, so a compare
    and the FNSTSW that reads it can land in different bodies, and the control
    word has to survive a call. (g_fp_stack/g_fp_top are declared above.) */
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS uint16_t g_fp_control_word;
+#endif
 /* CT3-nx: the lifter's per-function copy of it (translator.py,
  * _localize_x87_stack) loads and stores through these. */
+#ifdef XBOX_GUEST_REGS_IN_CPU
+static inline uint16_t recomp_fpcw_ld(void) { return XBOX_GTLS->fp_control_word; }
+#else
 static inline uint16_t recomp_fpcw_ld(void) { return g_fp_control_word; }
+#endif
+#ifdef XBOX_GUEST_REGS_IN_CPU
+static inline void recomp_fpcw_st(uint16_t cw) { XBOX_GTLS->fp_control_word = cw; }
+#else
 static inline void recomp_fpcw_st(uint16_t cw) { g_fp_control_word = cw; }
+#endif
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS int g_fp_cmp;
 extern RECOMP_TLS uint16_t g_fp_cc;
+#endif
 /* x87 precision control (control word bits 8-9). The stack is double-backed,
  * which matches PC=53 and is close enough for PC=64, but PC=24 -- what the
  * Xbox runs with -- rounds every arithmetic result to float. A title that
@@ -630,8 +675,10 @@ typedef union RecompXmm {
 } RecompXmm;
 #endif
 
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS RecompXmm g_xmm0, g_xmm1, g_xmm2, g_xmm3;
 extern RECOMP_TLS RecompXmm g_xmm4, g_xmm5, g_xmm6, g_xmm7;
+#endif
 
 /* -- construction -- */
 
@@ -1299,8 +1346,10 @@ typedef union RecompMmx {
 } RecompMmx;
 #endif
 
+#ifndef XBOX_GUEST_REGS_IN_CPU /* else xbox_guest_regs.h */
 extern RECOMP_TLS RecompMmx g_mm0, g_mm1, g_mm2, g_mm3;
 extern RECOMP_TLS RecompMmx g_mm4, g_mm5, g_mm6, g_mm7;
+#endif
 
 /* Loads and stores for a leaf function that keeps registers in C locals
  * (translator.py, _localize_leaf_registers). The locals shadow the globals

@@ -39,8 +39,12 @@ int SDL_ShowSimpleMessageBox(uint32_t flags, const char *title, const char *mess
                              void *window);
 #endif
 
+#ifndef XBOX_GUEST_REGS_IN_CPU
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
+#endif
+#ifndef XBOX_GUEST_REGS_IN_CPU
 extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi;
+#endif
 extern ptrdiff_t g_xbox_mem_offset;
 extern volatile uint32_t g_icall_trace[16];
 extern volatile uint32_t g_icall_trace_idx;
@@ -260,12 +264,22 @@ void nfsu2_text_patch_init(void);    /* text_patch.c: Switch button names */
 void xbox_nx_spread_thread(void);   /* win32_compat.c: off core 0, all cores allowed */
 void xbox_nx_track_thread(void *entry);   /* win32_compat.c: Switch [perf] report */
 
-static void *game_thread(void *arg)
+static void *game_thread_body(void *arg)
 {
     xbox_nx_spread_thread();
     xbox_nx_track_thread(NULL);          /* "game:" in the [perf] report */
     *(int *)arg = game_main();
     return NULL;
+}
+/* CT3-nx: the game runs here; with XBOX_GUEST_REGS its registers are CPU
+ * registers, set up by xbox_guest_regs_call. */
+static void *game_thread(void *arg)
+{
+#ifdef XBOX_GUEST_REGS_IN_CPU
+    return xbox_guest_regs_call(game_thread_body, arg);
+#else
+    return game_thread_body(arg);
+#endif
 }
 
 int main(int argc, char **argv)
