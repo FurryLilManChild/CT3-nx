@@ -1,5 +1,14 @@
 # Progress log (newest first)
 
+## 2026-11-09: Switch test 12a results
+
+- Boots and plays (Mark): a shift at 30 to 47 fps, with short stretches near 60; inconsistent (frames that miss
+  16.7 ms wait for the next vblank). GPU 6.6 to 9.0 ms a frame on average, 12.1 at most.
+- Lifted code on the main thread: 31.8% of samples (11a: 36.6%), about 1.15x faster (pitfall 36). Heaviest 10 s
+  windows (30 fps): main about 16.3 ms, graphics about 19.6 ms busy per frame. The graphics thread is the limit.
+- Graphics thread busy time: draw preparation 63%, reading the NV2A command stream 28%, queueing Vulkan
+  commands 8%.
+
 ## 2026-11-09: Strategy 1, guest registers in CPU registers (Switch test 12a)
 
 - xboxrecomp/src/kernel/xbox_guest_regs.h/.c (after OpenTrickyNX, MIT): eax..esp in w19-w25, the x87 stack top in

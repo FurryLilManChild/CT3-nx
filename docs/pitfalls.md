@@ -193,3 +193,10 @@ the rule.
     replacements for D3D's entry points, docs/d3d-path.md). After step 1 I moved to trimming the existing
     NV2A renderer (10b, 10c) without saying that this was a change of direction. The trims helped, but the
     profile shows Direct3D is still about a third of the main thread's work, untouched.
+
+36. **A technique's reported speedup is relative to its own baseline.** (Switch test 12a, 2026-11-09.)
+    OpenTrickyNX reports about 3x for guest registers in CPU registers, against a translator that kept every
+    register in thread-local memory. Ours already kept them in C locals inside a function. I first quoted their
+    figure, then corrected it to 1.25 to 1.4x; the measured gain on lifted code was about 1.15x (31.8% of main
+    thread samples against 36.6%). Rule: before quoting another port's gain, compare its baseline with ours, and
+    give the estimate as a range with what it rests on.
