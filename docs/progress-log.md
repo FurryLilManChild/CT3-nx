@@ -1,5 +1,17 @@
 # Progress log (newest first)
 
+## 2026-11-09: Switch test 11a results; strategy review of the other Xbox Switch ports
+
+- 11a: looks right (Mark). A shift at 33 to 50 fps (10c: 30 to 50). GPU time 7.5 to 9.9 ms a frame on average,
+  12.1 ms at most: the GPU is not the limit. Heaviest windows: main about 15.7 ms (10c: about 19), graphics about
+  17.8 ms busy per frame. Native D3D code 4% of the main thread (the same functions lifted were about 11%).
+- Main thread busy time: about 75% lifted code (game 22%, D3D still lifted 8%, XG and CRT 4%, TLS 2% of samples).
+- Review of the Xbox ports on robzilla10001/SwitchPorts: two strategies behind ports at 60 fps. (1) Guest x86
+  registers in host CPU registers (OpenTrickyNX, SSX Tricky; same xboxrecomp toolkit, MIT folder): GCC global
+  register variables w19-w25 for eax..esp, x26 for the per-thread guest state, w27 for the x87 stack top; they report
+  translated code about 3x faster. (2) Direct3D replaced at the API level (TGP482/XboxXBE-Recomp, MIT; Black,
+  Shaolin Monks, FIFA Street): no NV2A command stream at all.
+
 ## 2026-11-08: back on the Direct3D path (Switch test 11a)
 
 - Mark: his design choices are binding (CLAUDE.md, pitfall 35). docs/d3d-path.md step 3, entry points by cost.
