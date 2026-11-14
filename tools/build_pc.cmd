@@ -8,7 +8,7 @@ call "%VS%\Common7\Tools\VsDevCmd.bat" -arch=amd64 -host_arch=amd64 >nul
 set "PATH=%VS%\VC\Tools\Llvm\x64\bin;%VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%"
 cd /d "%~dp0.."
 if not exist "game\assets\default.xbe" (
- echo No game\assets\default.xbe: link or copy the game files into sheroes-nx\game\assets first.
+ echo No game\assets\default.xbe: link or copy the game files into CT3-nx\game\assets first.
  exit /b 1
 )
 if "%VERBOSE%"=="" set VERBOSE=OFF

@@ -53,6 +53,22 @@ void MirrorGamma(const uint8_t* ramp);  // sheroes-nx, below
 #define SYM_D3DDevice_LoadVertexShaderProgram FFFFFE06
 #define HAS_D3DDevice_LoadVertexShaderProgram 0
 #endif
+#ifndef SYM_D3DDevice_SetModelView  // CT3-nx: XDK 4531 (Crazy Taxi 3)
+#define SYM_D3DDevice_SetModelView FFFFFE10
+#define HAS_D3DDevice_SetModelView 0
+#endif
+#ifndef SYM_D3DDevice_SetVertexBlendModelView  // CT3-nx: XDK 4531 (Crazy Taxi 3)
+#define SYM_D3DDevice_SetVertexBlendModelView FFFFFE11
+#define HAS_D3DDevice_SetVertexBlendModelView 0
+#endif
+#ifndef SYM_D3DDevice_GetProjectionViewportMatrix  // CT3-nx: XDK 4531 (Crazy Taxi 3)
+#define SYM_D3DDevice_GetProjectionViewportMatrix FFFFFE12
+#define HAS_D3DDevice_GetProjectionViewportMatrix 0
+#endif
+#ifndef SYM_D3DDevice_SetVertexShaderInput  // CT3-nx: XDK 4531 (Crazy Taxi 3)
+#define SYM_D3DDevice_SetVertexShaderInput FFFFFE13
+#define HAS_D3DDevice_SetVertexShaderInput 0
+#endif
 
 namespace d3d {
 
@@ -73,6 +89,33 @@ constexpr uint32_t kTextureState = SYM(D3D_DeferredTextureState);  // [4][32]
 constexpr uint32_t kRenderState = SYM(D3D_RenderState);            // [166]
 constexpr uint32_t kStreams = SYM(D3D_Streams);                    // [16] stride, offset, buffer
 constexpr uint32_t kSimpleEncode = SYM(D3D_SimpleRenderStateEncode);
+
+// CT3-nx: the image's D3DRS numbering against the runtime's (layout.h). Simple states keep their numbers; the deferred
+// and complex blocks start at the image's own first index; an image without D3DRS_SAMPLEALPHA numbers the complex
+// states after it one lower. Identity for 5233, 5659 and 5849.
+constexpr uint32_t kGuestDeferredFirst = XDK_RenderState_DeferredFirst, kGuestComplexFirst = XDK_RenderState_ComplexFirst;
+constexpr bool kGuestSampleAlpha = XDK_RenderState_HasSampleAlpha != 0;
+constexpr uint32_t kGuestDeferred = kGuestComplexFirst - kGuestDeferredFirst;
+constexpr uint32_t kGuestRsMax = kGuestComplexFirst + (gpu::kRsMax - gpu::kRsComplexFirst) - (kGuestSampleAlpha ? 0 : 1);
+static_assert(kGuestDeferredFirst <= gpu::kRsDeferredFirst && kGuestDeferred <= gpu::kRsComplexFirst - gpu::kRsDeferredFirst);
+// the image's index of a runtime state, kNoGuestRs when the image has no such state
+constexpr uint32_t kNoGuestRs = 0xFFFFFFFFu;
+constexpr uint32_t GuestRs(uint32_t rs) {
+    if (rs < gpu::kRsDeferredFirst) return rs < kGuestDeferredFirst ? rs : kNoGuestRs;
+    if (rs < gpu::kRsComplexFirst) return rs - gpu::kRsDeferredFirst < kGuestDeferred ? rs - gpu::kRsDeferredFirst + kGuestDeferredFirst : kNoGuestRs;
+    if (!kGuestSampleAlpha && rs == gpu::kRsSampleAlpha) return kNoGuestRs;
+    return rs - gpu::kRsComplexFirst + kGuestComplexFirst - (!kGuestSampleAlpha && rs > gpu::kRsSampleAlpha ? 1 : 0);
+}
+// the runtime's index of an image state, gpu::kRsMax when out of range
+constexpr uint32_t HostRs(uint32_t g) {
+    if (g < kGuestDeferredFirst) return g;
+    if (g < kGuestComplexFirst) return g - kGuestDeferredFirst + gpu::kRsDeferredFirst;
+    if (g >= kGuestRsMax) return gpu::kRsMax;
+    uint32_t rs = g - kGuestComplexFirst + gpu::kRsComplexFirst;
+    return !kGuestSampleAlpha && rs >= gpu::kRsSampleAlpha ? rs + 1 : rs;
+}
+static_assert(HostRs(GuestRs(gpu::kRsCullMode)) == gpu::kRsCullMode && HostRs(GuestRs(gpu::kRsDoNotCullUncompressed)) ==
+              gpu::kRsDoNotCullUncompressed && HostRs(GuestRs(gpu::kRsFogEnable)) == gpu::kRsFogEnable);
 
 // CDevice fields mirrored so the recompiled getters and resource code see what the XDK would
 constexpr uint32_t kDevPush = XDK_CDevice_Push, kDevThreshold = XDK_CDevice_PushThreshold,
@@ -223,13 +266,16 @@ void SyncDeferred() {
     // deferred states live in the title's memory, the inline SetRenderState and SetTextureStageState write them.
     // BREXTREME: each block compared whole first, it rarely changes between draws: one load and compare per state
     // (132 a draw) was 6 % of the title thread on the Switch
-    constexpr uint32_t kRsDeferred = gpu::kRsComplexFirst - gpu::kRsDeferredFirst;
-    static_assert(kRsDeferred * 4 % 8 == 0 && gpu::kTssBumpEnvMat00 * 4 % 8 == 0);
-    if (!SameWords(&G<uint8_t>(kRenderState + gpu::kRsDeferredFirst * 4), &g_state.rs[gpu::kRsDeferredFirst],
-                   kRsDeferred * 4))
-        for (uint32_t i = gpu::kRsDeferredFirst; i < gpu::kRsComplexFirst; i++) {
-            uint32_t v = R32(kRenderState + i * 4);
-            if (v != g_state.rs[i]) TOUCH(g_state.rs[i]), g_state.rs[i] = v;
+    // CT3-nx: the image's deferred block (kGuestDeferred states from kGuestDeferredFirst) lands on the runtime's
+    // from kRsDeferredFirst; compared in whole 8 byte words, the odd last state of a 4531 block apart
+    static_assert(gpu::kTssBumpEnvMat00 * 4 % 8 == 0);
+    constexpr uint32_t kWords = kGuestDeferred & ~1u;
+    const uint32_t guest = kRenderState + kGuestDeferredFirst * 4;
+    if (!SameWords(&G<uint8_t>(guest), &g_state.rs[gpu::kRsDeferredFirst], kWords * 4) ||
+        (kGuestDeferred & 1 && R32(guest + kWords * 4) != g_state.rs[gpu::kRsDeferredFirst + kWords]))
+        for (uint32_t i = 0; i < kGuestDeferred; i++) {
+            uint32_t v = R32(guest + i * 4), rs = gpu::kRsDeferredFirst + i;
+            if (v != g_state.rs[rs]) TOUCH(g_state.rs[rs]), g_state.rs[rs] = v;
         }
     for (int s = 0; s < 4; s++) {
         const uint32_t stage = kTextureState + s * kStageStates * 4;
@@ -274,7 +320,7 @@ void UpdateViewportConstants() {
 void SetComplex(uint32_t rs, uint32_t v) {
     TOUCH(g_state.rs[rs]);
     g_state.rs[rs] = v;
-    W32(kRenderState + rs * 4, v);
+    if (uint32_t g = GuestRs(rs); g != kNoGuestRs) W32(kRenderState + g * 4, v);  // CT3-nx: the image's numbering
 }
 
 // The library's default render and texture stage states; its pushes land in the scratch buffer
@@ -887,12 +933,14 @@ HLE_FASTCALL(D3DDevice_SetRenderState_Simple, 0) {
 }
 
 HLE_STDCALL(D3DDevice_SetRenderStateNotInline, 2) {
-    uint32_t rs = a[0], v = a[1];
-    if (rs < gpu::kRsDeferredFirst) {
-        uint32_t method = R32(kSimpleEncode + rs * 4) & 0x1FFC;
+    uint32_t g = a[0], v = a[1], rs = HostRs(g);  // CT3-nx: the image's numbering to the runtime's
+    if (g < kGuestDeferredFirst) {
+        uint32_t method = R32(kSimpleEncode + g * 4) & 0x1FFC;
         gpu::TouchSimple(g_state, method >> 2);
         g_state.simple[method >> 2] = v;
-        W32(kRenderState + rs * 4, v);  // titles read their states back from the library's table
+        W32(kRenderState + g * 4, v);  // titles read their states back from the library's table
+    } else if (g < kGuestComplexFirst) {
+        W32(kRenderState + g * 4, v);  // deferred: picked up from the table at the next draw (SyncDeferred)
     } else if (rs < gpu::kRsMax) {
         SetComplex(rs, v);
     }
@@ -977,6 +1025,81 @@ HLE_STDCALL(D3DDevice_SetTransform, 2) {
     return 0;
 }
 
+// CT3-nx: explicit model view transforms (XDK 4531's Hitmaker engine builds its own matrices and hands them over
+// with these instead of SetTransform). The backends use State::mv while mv_count is set (gfx_common.h).
+namespace d3d {
+namespace {
+void Mul4(const float* x, const float* y, float* o) {
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++)
+            o[r * 4 + c] = x[r * 4] * y[c] + x[r * 4 + 1] * y[4 + c] + x[r * 4 + 2] * y[8 + c] + x[r * 4 + 3] * y[12 + c];
+}
+// D3D_UpdateProjectionViewportTransform (4531: 0xF3A50): projection times the viewport scale to screen space, the
+// viewport's X and Y left out (the hardware adds them) and no super sampling here (SuperSample is 1)
+void ProjectionViewport(float* out) {
+    const auto& v = g_state.viewport;
+    float hw = v.w * 0.5f, hh = v.h * 0.5f;
+    float s[16] = {hw, 0, 0, 0, 0, -hh, 0, 0, 0, 0, (v.max_z - v.min_z) * g_state.zscale, 0,
+                   hw, hh, v.min_z * g_state.zscale, 1};
+    if (g_state.rs[gpu::kRsZEnable] == 2) LOG_FIRST(1, "d3d: projection viewport matrix with a w-buffer, its scale is left out");
+    Mul4(g_state.transforms[3].data(), s, out);
+}
+}  // namespace
+}  // namespace d3d
+
+// (pMatrix): projection * viewport, what the title builds its composites from
+HLE_STDCALL(D3DDevice_GetProjectionViewportMatrix, 1) {
+    std::lock_guard<HleLock> lock(g_lock);
+    float m[16];
+    ProjectionViewport(m);
+    std::memcpy(HostPtr(a[0]), m, 64);
+    return 0;
+}
+// (pModelView, pInverseModelView, pComposite): null model view goes back to SetTransform's matrices. The inverse is
+// recomputed from the model view where the normals need it; a null composite is model view * projection viewport.
+HLE_STDCALL(D3DDevice_SetModelView, 3) {
+    std::lock_guard<HleLock> lock(g_lock);
+    TOUCH(g_state.mv_count);
+    TOUCH(g_state.mv_composite);
+    if (!a[0]) {
+        g_state.mv_count = 0;
+        return 0;
+    }
+    TOUCH(g_state.mv[0]);
+    TOUCH(g_state.mv_screen);
+    std::memcpy(g_state.mv[0].data(), HostPtr(a[0]), 64);
+    if (a[2]) {
+        std::memcpy(g_state.mv_screen.data(), HostPtr(a[2]), 64);
+    } else {
+        float pv[16];
+        ProjectionViewport(pv);
+        Mul4(g_state.mv[0].data(), pv, g_state.mv_screen.data());
+    }
+    g_state.mv_count = 1;
+    g_state.mv_composite = 1;
+    return 0;
+}
+// (Count, pModelViews, pInverseModelViews, pProjectionViewport): the model views of a blended draw; Count 0 goes back
+HLE_STDCALL(D3DDevice_SetVertexBlendModelView, 4) {
+    std::lock_guard<HleLock> lock(g_lock);
+    uint32_t n = std::min<uint32_t>(a[0], 4);
+    TOUCH(g_state.mv_count);
+    TOUCH(g_state.mv_composite);
+    if (!n || !a[1]) {
+        g_state.mv_count = 0;
+        return 0;
+    }
+    TOUCH(g_state.mv);
+    TOUCH(g_state.mv_screen);
+    for (uint32_t i = 0; i < n; i++) std::memcpy(g_state.mv[i].data(), HostPtr(a[1] + i * 64), 64);
+    for (uint32_t i = n; i < 4; i++) g_state.mv[i] = g_state.mv[0];
+    if (a[3]) std::memcpy(g_state.mv_screen.data(), HostPtr(a[3]), 64);
+    else ProjectionViewport(g_state.mv_screen.data());
+    g_state.mv_count = n;
+    g_state.mv_composite = 0;
+    return 0;
+}
+
 HLE_STDCALL(D3DDevice_SetMaterial, 1) {
     TOUCH(g_state.material);
     std::memcpy(g_state.material.data(), HostPtr(a[0]), 17 * 4);
@@ -1049,6 +1172,13 @@ HLE_FASTCALL(D3DDevice_SwitchTexture, 1) {
     return 0;
 }
 
+// CT3-nx: SetVertexShaderInput's streams, in effect instead of SetStreamSource's until it is called with handle 0
+namespace d3d {
+bool g_vsi_on = false;
+std::array<gpu::State::Stream, 16> g_vsi_saved{};  // SetStreamSource's while they are
+std::array<uint32_t, 16> g_vsi_refs{};             // the buffers it holds
+}  // namespace d3d
+
 HLE_STDCALL(D3DDevice_SetStreamSource, 3) {
     std::lock_guard<HleLock> lock(g_lock);
     uint32_t n = a[0] & 15, vb = a[1], stride = a[2];
@@ -1057,8 +1187,43 @@ HLE_STDCALL(D3DDevice_SetStreamSource, 3) {
     W32(kStreams + n * kStreamSize + XDK_Stream_Stride, stride);
     W32(kStreams + n * kStreamSize + XDK_Stream_Buffer, vb);
     Release(ctx, old);
+    if (g_vsi_on) {  // CT3-nx: comes back into effect when SetVertexShaderInput is undone
+        g_vsi_saved[n] = {vb, stride, 0};
+        return 0;
+    }
     TOUCH(g_state.streams[n]);
     g_state.streams[n] = {vb, stride};
+    return 0;
+}
+
+// (Handle, StreamCount, pStreamInputs): D3DSTREAM_INPUT {VertexBuffer, Stride, Offset} per stream, read through the
+// declaration of the vertex shader in use (the library reads Handle's, which the title sets as the current one)
+HLE_STDCALL(D3DDevice_SetVertexShaderInput, 3) {
+    std::lock_guard<HleLock> lock(g_lock);
+    uint32_t h = a[0], n = std::min<uint32_t>(a[1], 16), in = a[2];
+    std::array<uint32_t, 16> old = g_vsi_refs;
+    g_vsi_refs = {};
+    TOUCH(g_state.streams);
+    if (!h) {
+        if (g_vsi_on) g_state.streams = g_vsi_saved;
+        g_vsi_on = false;
+    } else {
+        if (h != g_state.vs_handle)
+            LOG_FIRST(4, "d3d: SetVertexShaderInput for shader %08X while %08X is set", h, g_state.vs_handle);
+        if (!g_vsi_on) g_vsi_saved = g_state.streams;
+        g_vsi_on = true;
+        for (uint32_t i = 0; i < 16; i++) {
+            if (i >= n) {
+                g_state.streams[i] = {};
+                continue;
+            }
+            uint32_t vb = R32(in + i * 12), stride = R32(in + i * 12 + 4), off = R32(in + i * 12 + 8);
+            AddRef(ctx, vb);
+            g_vsi_refs[i] = vb;
+            g_state.streams[i] = {vb, stride, off};
+        }
+    }
+    for (uint32_t r : old) Release(ctx, r);
     return 0;
 }
 

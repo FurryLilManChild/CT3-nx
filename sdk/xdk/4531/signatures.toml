@@ -1,0 +1,281 @@
+# XDK library signatures read by xbe_symbols, written by xbe_symbols in sign mode. No library bytes stored.
+# [symbols] name = {sec, len, hash, calls, deep, count, nth}: hash of len bytes from the function start in
+# section sec, image addresses and rel32 targets masked; calls = [len, hash, calls] of each rel32 call or
+# jump target outside it, in order, two levels deep; deep = lookalikes exist, so the callees' callees must
+# match too; count and nth pick one of identical functions by link order; xtlid = its .XTLID export id,
+# used when the bytes match nothing. {} = no signature, stays 0.
+# k = its constants, sorted: immediates and displacements of instructions that do not use the stack, when
+# not an image address, a branch target or below 0x40; an address inside .text counts in a library section,
+# which holds no such pointer. ret = stack bytes its rets pop, regs = registers it reads before it writes
+# them. A function the bytes do not find is matched by k; ret and regs then show a changed convention.
+# [anchors] functions only used to find data. [data] in = function, insn = instruction index, op = operand,
+# xtlid = the id .XTLID lists the address under, used when in finds nothing.
+
+[symbols]
+BinkDoFrame = {}
+BinkGetSummary = {}
+BinkNextFrame = {}
+BinkWait = {}
+CDevice_KickOff = {sec = "D3D", len = 0xE3, hash = "0xAB0EA8ED7D7E6A00", calls = [[0x34, "0x10F49DAD2EB4D3CD", []]], k = [0x40, 0x40, 0x40, 0x40, 0x44, 0x35C, 0x2000, 0x2278, 0x2278, 0x2278, 0x2278, 0x227C, 0x2470, 0x2AD4, 0x2AD8, 0xFFFFFFF, 0xFFFFFFF], ret = 0, regs = ["ecx"]}
+CDirectSoundStream_AddRef = {}
+CDirectSoundStream_Discontinuity = {}
+CDirectSoundStream_Flush = {}
+CDirectSoundStream_FlushEx = {}
+CDirectSoundStream_GetInfo = {}
+CDirectSoundStream_GetStatus = {}
+CDirectSoundStream_Pause = {}
+CDirectSoundStream_Process = {}
+CDirectSoundStream_Release = {}
+CDirectSoundStream_SetFilter = {}
+CDirectSoundStream_SetFormat = {}
+CDirectSoundStream_SetFrequency = {}
+CDirectSoundStream_SetHeadroom = {}
+CDirectSoundStream_SetI3DL2Source = {}
+CDirectSoundStream_SetMaxDistance = {}
+CDirectSoundStream_SetMinDistance = {}
+CDirectSoundStream_SetMixBinVolumes = {}
+CDirectSoundStream_SetMixBins = {}
+CDirectSoundStream_SetPosition = {}
+CDirectSoundStream_SetVelocity = {}
+CDirectSoundStream_SetVolume = {}
+D3DDevice_Begin = {sec = "D3D", len = 0x35, hash = "0xC578D9AD869E942C", calls = [[0x75, "0x4BD88DD3F57C6876", [[0x165, "0x34300C4BCCB1BD26"], [0x17E, "0xBC02CE80CB7785DD"], [0xAE, "0x858FA25AFC18D2A5"], [0x1E6, "0x3A1B16ECC41B7F3"], [0x1DA, "0xDD972AC5AE5F84DA"], [0x383, "0xD7E2BB5DCD9E7CFD"], [0x33A, "0xE20F1C29261E608D"], [0x1F4, "0xC4C90BC7C0915FEA"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x800, 0x417FC], ret = 4, regs = []}
+D3DDevice_BeginPush = {sec = "D3D", len = 0x20, hash = "0x33592CB325F2756", calls = [[0x191, "0xF6798E031DA75BC1", [[0x75, "0x4BD88DD3F57C6876"], [0xF, "0x992EC001666B3982"]]], [0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]]], ret = 4, regs = []}
+D3DDevice_BlockOnFence = {sec = "D3D", len = 0xF, hash = "0xC049DC696B8ED5F4", calls = [[0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]]], ret = 4, regs = []}
+D3DDevice_BlockUntilVerticalBlank = {sec = "D3D", len = 0x24, hash = "0xAB5FE496D7E17F99", k = [0x2448, 0x244C], ret = 0, regs = []}
+D3DDevice_Clear = {sec = "D3D", len = 0x39C, hash = "0xBABC66078D0D1333", calls = [[0x16, "0x1DBD5577E019815D", []], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x100, 0x458, 0x458, 0x45C, 0x45C, 0x9D0, 0x9D4, 0x9D8, 0x9DC, 0x2070, 0x2074, 0x40208, 0x40208, 0x81D98, 0xC1D8C, 0xFFFFFDFF], ret = 24, regs = []}
+D3DDevice_CopyRects = {sec = "D3D", len = 0x2A5, hash = "0x1DA295523D69D251", calls = [[0x5C, "0x23CABB00661424AB", []], [0x5C, "0x23CABB00661424AB", []], [0x1A, "0x4966A7BB11F970F8", []], [0x79, "0x8A7008697D80ABA6", [[0x1A, "0x4966A7BB11F970F8"]]], [0xE7, "0xA0F17D25F35A0AB1", [[0xF, "0x992EC001666B3982"], [0xF, "0x992EC001666B3982"]]]], k = [0x80, 0x100, 0xFFF, 0xFFF, 0x1000, 0x1FC0, 0x201C], ret = 20, regs = []}
+D3DDevice_CreatePixelShader = {sec = "D3D", len = 0x45, hash = "0x19856ED65E8E508C", calls = [[0x1D, "0x345B18AE6CE600A0", [[0x79B, "0xE33AB46FD1CDB1C3"]]]], k = [0x8007000E], ret = 8, regs = []}
+D3DDevice_CreateVertexShader = {sec = "D3D", len = 0x13E, hash = "0xE85EA7499B6640D6", calls = [[0xF7, "0xD1E6B62F3D388EE7", []], [0x1D, "0x345B18AE6CE600A0", [[0x79B, "0xE33AB46FD1CDB1C3"]]], [0x199, "0xEAFF2E1A5A27F36F", []], [0x68, "0x48B54173CEF6CCA6", []], [0xF7, "0xD1E6B62F3D388EE7", []]], k = [0x46, 0x7F, 0x114, 0x114, 0x114, 0x118, 0x2078, 0x7378, 0x8007000E], ret = 16, regs = []}
+D3DDevice_DeletePixelShader = {sec = "D3D", len = 0x1B, hash = "0x866F8D95FD52D3E4", calls = [[0x1E, "0x25794508EBC6E332", [[0x1DE, "0x586E8ECD29842B28"]]]], ret = 4, regs = []}
+D3DDevice_DeleteVertexShader = {sec = "D3D", len = 0x19, hash = "0xDAADF38B616CDBDE", calls = [[0x1E, "0x25794508EBC6E332", [[0x1DE, "0x586E8ECD29842B28"]]]], ret = 4, regs = []}
+D3DDevice_DrawIndexedVertices = {sec = "D3D", len = 0x258, hash = "0x74C1C31E1571FA7D", calls = [[0x191, "0xF6798E031DA75BC1", [[0x75, "0x4BD88DD3F57C6876"], [0xF, "0x992EC001666B3982"]]], [0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]], [0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]], [0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], k = [0x40, 0x40, 0x40, 0x40, 0x5C, 0x60, 0x1FF, 0x1FF, 0x3FE, 0x3FE, 0x800, 0x417FC, 0x417FC, 0x41808, 0x40001800, 0x40001800, 0x40001800, 0xFFFFE7FF], ret = 12, regs = []}
+D3DDevice_DrawVertices = {}
+D3DDevice_DrawVerticesUP = {sec = "D3D", len = 0x15E, hash = "0x5C11E706103DE0B", calls = [[0x13E, "0x9B459322BB772701", [[0x75, "0x4BD88DD3F57C6876"], [0xF, "0x992EC001666B3982"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]], [0x90, "0x233EA7E2170F4E7B", []], [0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], k = [0x80, 0x6B8, 0x6B8, 0x6BC, 0x6C0, 0x6C4, 0x744, 0x7FF, 0x800, 0x417FC, 0x417FC, 0x40001818, 0xFFFFE7FF], ret = 16, regs = []}
+D3DDevice_EnableOverlay = {}
+D3DDevice_End = {sec = "D3D", len = 0x3D, hash = "0x8399607A7E8EA565", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], k = [0x417FC, 0xFFFFE7FF], ret = 0, regs = []}
+D3DDevice_EndPush = {sec = "D3D", len = 0xF, hash = "0x37C661E81F0F27D0", ret = 4, regs = []}
+D3DDevice_FlushVertexCache = {}
+D3DDevice_GetBackBuffer = {sec = "D3D", len = 0x33, hash = "0x604AAFC69C6CA8A7", calls = [[0x37, "0x4DD4FEAA2A7C506E", []]], k = [0x207C], ret = 12, regs = []}
+D3DDevice_GetBackBuffer2 = {}
+D3DDevice_GetDepthStencilSurface = {sec = "D3D", len = 0x28, hash = "0x3F7EDCF4092240CA", calls = [[0x37, "0x4DD4FEAA2A7C506E", []]], k = [0x2074, 0x88760866], ret = 4, regs = []}
+D3DDevice_GetDepthStencilSurface2 = {}
+D3DDevice_GetProjectionViewportMatrix = {sec = "D3D", len = 0x1E, hash = "0x46F691F39749DD35", k = [0x470], ret = 4, regs = []}
+D3DDevice_GetRenderTarget = {sec = "D3D", len = 0x20, hash = "0x83BF8A2B07488DBD", calls = [[0x37, "0x4DD4FEAA2A7C506E", []]], k = [0x2070], ret = 4, regs = []}
+D3DDevice_GetRenderTarget2 = {}
+D3DDevice_GetVertexShaderFunction = {}
+D3DDevice_InsertFence = {sec = "D3D", len = 0x8, hash = "0x31725F12AA8374B9", calls = [[0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], ret = 0, regs = []}
+D3DDevice_IsFencePending = {}
+D3DDevice_LightEnable = {sec = "D3D", len = 0xE4, hash = "0x60165C619702D68", calls = [[0x1DE, "0x95B4DE1F199B9E8", [[0x1D, "0x345B18AE6CE600A0"], [0x1E, "0x25794508EBC6E332"], [0x42, "0xEB5E0CBAE8F0DBA4"], [0xD6, "0x3711298C2AF127AE"], [0x9, "0x9977EB4A884FFE82"], [0x9, "0x9977EB4A884FFE82"], [0x31, "0xBB242DE1AB777DA2"]]]], k = [0x68, 0x68, 0x68, 0x8C, 0x8C, 0x8C, 0x8C, 0x30C, 0x390, 0x390, 0x394, 0x398, 0x398, 0x398, 0x1000], ret = 8, regs = []}
+D3DDevice_LoadVertexShader = {sec = "D3D", len = 0x54, hash = "0x4CDBD4A4D8695927", calls = [[0xAA, "0x2D947814F1C6FF55", []], [0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x114, 0x41E9C], ret = 8, regs = []}
+D3DDevice_LoadVertexShaderProgram = {}
+D3DDevice_MakeSpace = {sec = "D3D", len = 0xF, hash = "0x992EC001666B3982", calls = [[0x173, "0x73BF65E35595A8B4", [[0xE6, "0xA7EEEFCAB92E4D10"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0xAD, "0x65BC38CE726F47AC"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], ret = 0, regs = []}
+D3DDevice_PersistDisplay = {}
+D3DDevice_Release = {sec = "D3D", len = 0x37, hash = "0x6BEE3994A249F34B", calls = [[0x199, "0xA0AC952E8A65F521", [[0x11, "0x5072EAB10AF84A81"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0x1D, "0xB6FEF857C3841887"], [0x11, "0xE1C2B427D7642E6C"], [0x119, "0x1F13B42D4914B43D"], [0x20, "0xD27E8E64BE393620"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x1E, "0x25794508EBC6E332"], [0x1A6, "0x6F2D70B9E0272873"]]]], k = [0x440, 0x440, 0xAC0], ret = 0, regs = []}
+D3DDevice_SelectVertexShader = {sec = "D3D", len = 0x80, hash = "0x8086C30047D3C3E1", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x380, 0x384, 0x388, 0x1070, 0x41EA0, 0x81E94], ret = 8, regs = []}
+D3DDevice_SetFlickerFilter = {sec = "D3D", len = 0x42, hash = "0xB43EC7BE8F6B66B7", k = [0x227C], ret = 4, regs = []}
+D3DDevice_SetGammaRamp = {}
+D3DDevice_SetIndices = {}
+D3DDevice_SetLight = {sec = "D3D", len = 0x1DE, hash = "0x95B4DE1F199B9E8", calls = [[0x1D, "0x345B18AE6CE600A0", [[0x79B, "0xE33AB46FD1CDB1C3"]]], [0x1E, "0x25794508EBC6E332", [[0x1DE, "0x586E8ECD29842B28"]]], [0x42, "0xEB5E0CBAE8F0DBA4", [[0x61, "0x3BD9129A9A9ED268"]]], [0xD6, "0x3711298C2AF127AE", [[0x52, "0xA524E923C6BBDAF3"], [0xB, "0x29ACAB483DEE08FC"], [0x9, "0x5AE13FDFB3B6A4DF"]]], [0x9, "0x9977EB4A884FFE82", []], [0x9, "0x9977EB4A884FFE82", []], [0x31, "0xBB242DE1AB777DA2", [[0x61, "0x3BD9129A9A9ED268"]]]], k = [0x40, 0x44, 0x48, 0x50, 0x60, 0x64, 0x68, 0x68, 0x6C, 0x78, 0x7C, 0x80, 0x84, 0x88, 0x8C, 0x390, 0x390, 0x390, 0x390, 0x390, 0x394, 0x394, 0x398, 0x398, 0x1000, 0x8007000E], ret = 8, regs = []}
+D3DDevice_SetMaterial = {sec = "D3D", len = 0x30, hash = "0x3AF77343A82FB678", k = [0x9F0, 0x1000], ret = 4, regs = []}
+D3DDevice_SetModelView = {sec = "D3D", len = 0xB2, hash = "0xCB308DC7004D412E", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x70, "0x7D9C5AF64969EA58", []], [0x70, "0x7D9C5AF64969EA58", []]], k = [0x44, 0x88, 0x200, 0x4B0, 0x7FFFFDFF, 0x80000000, 0xFFFFFDFF], ret = 12, regs = []}
+D3DDevice_SetPalette = {sec = "D3D", len = 0x8D, hash = "0x83832D9C302DD08C", calls = [[0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0xA88, 0xA88, 0xA88, 0x41B20, 0x80000, 0xFFF80000], ret = 8, regs = []}
+D3DDevice_SetPixelShader = {sec = "D3D", len = 0x1CA, hash = "0x2DA647C8193EB584", calls = [[0x51, "0x5C7E9BC222FC9004", [[0xF, "0x992EC001666B3982"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x4F, "0xFADA43A8E41D4054", []], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x4F, "0xFADA43A8E41D4054", []]], k = [0xA8, 0xA8, 0xAC, 0xAC, 0xB0, 0xB0, 0xB4, 0xB4, 0xB8, 0xBC, 0xC0, 0xD8, 0xD8, 0xDC, 0xE0, 0xE4, 0xE8, 0xEC, 0xEC, 0xF0, 0xF0, 0xF4, 0xF8, 0xFC, 0x100, 0x370, 0x370, 0x374, 0x374, 0x374, 0x378, 0x37C, 0x2000, 0x4000, 0x4800, 0x417F8, 0x41E78, 0x80288, 0x81E20, 0x81E74], ret = 4, regs = []}
+D3DDevice_SetPixelShaderConstant = {}
+D3DDevice_SetRenderStateNotInline = {sec = "D3D", len = 0x5A, hash = "0xF8C920D8ED52163C", calls = [[0x27, "0xFD83B1F6F3776DB0", [[0xF, "0x992EC001666B3982"]]]], k = [0x53, 0x76], ret = 8, regs = []}
+D3DDevice_SetRenderState_BackFillMode = {sec = "D3D", len = 0x51, hash = "0xBC78C06F8285CC04", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x8038C], ret = 4, regs = []}
+D3DDevice_SetRenderState_CullMode = {sec = "D3D", len = 0x68, hash = "0x41E41F4067D70FAB", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x404, 0x40308, 0x4039C], ret = 4, regs = []}
+D3DDevice_SetRenderState_DoNotCullUncompressed = {sec = "D3D", len = 0x11, hash = "0x4F7F4A773101B2F1", count = 3, nth = 2, deep = true, calls = [[0xCE, "0x74D0EE641254D645", [[0xF, "0x992EC001666B3982"]]]], ret = 4, regs = []}
+D3DDevice_SetRenderState_Dxt1NoiseEnable = {sec = "D3D", len = 0x7F, hash = "0x85A0636A155ACE1A", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x2070, 0x40100, 0x40110, 0x41D8C], ret = 4, regs = []}
+D3DDevice_SetRenderState_EdgeAntiAlias = {sec = "D3D", len = 0x32, hash = "0x730A89937FD22F33", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x80320], ret = 4, regs = []}
+D3DDevice_SetRenderState_FillMode = {sec = "D3D", len = 0x44, hash = "0xF4CFF32CF2609D44", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x8038C], ret = 4, regs = []}
+D3DDevice_SetRenderState_FogColor = {sec = "D3D", len = 0x4D, hash = "0x1B01BAE4601E76CF", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0xFF, 0x402A8, 0xFF00FF00], ret = 4, regs = []}
+D3DDevice_SetRenderState_FrontFace = {sec = "D3D", len = 0x3A, hash = "0x9BC97623E21CE0ED", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x68, "0x41E41F4067D70FAB", [[0xF, "0x992EC001666B3982"]]]], k = [0x403A0], regs = []}
+D3DDevice_SetRenderState_LineWidth = {sec = "D3D", len = 0x65, hash = "0x116BAEBB94C59A9A", calls = [[0x9, "0x5AE13FDFB3B6A4DF", []], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x1FF, 0x1FF, 0x460, 0x40380], ret = 4, regs = []}
+D3DDevice_SetRenderState_LogicOp = {sec = "D3D", len = 0x52, hash = "0x9B9DDE0E59AC0F69", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x417BC, 0x817BC], ret = 4, regs = []}
+D3DDevice_SetRenderState_MultiSampleAntiAlias = {sec = "D3D", len = 0x52, hash = "0x5DCB48297D3ABEE9", calls = [[0xF0, "0x25D3E1E14453CB42", [[0x48, "0x353072E0DFDE33A6"], [0x68, "0x48B54173CEF6CCA6"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]]], k = [0x41D7C], ret = 4, regs = []}
+D3DDevice_SetRenderState_MultiSampleMask = {}
+D3DDevice_SetRenderState_MultiSampleMode = {sec = "D3D", len = 0x2D, hash = "0x43DA1D30E7A1744D", calls = [[0x12C, "0xD44BB64C5A9F138D", [[0x5C, "0x23CABB00661424AB"], [0x5C, "0x23CABB00661424AB"], [0x378, "0x877ED682BA468C03"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x9, "0x5AE13FDFB3B6A4DF"]]]], k = [0x2070, 0x2074, 0x207C], ret = 4, regs = []}
+D3DDevice_SetRenderState_MultiSampleRenderTargetMode = {sec = "D3D", len = 0x2D, hash = "0xF502D9387AC93DDA", calls = [[0x12C, "0xD44BB64C5A9F138D", [[0x5C, "0x23CABB00661424AB"], [0x5C, "0x23CABB00661424AB"], [0x378, "0x877ED682BA468C03"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x9, "0x5AE13FDFB3B6A4DF"]]]], k = [0x2070, 0x2074, 0x207C], ret = 4, regs = []}
+D3DDevice_SetRenderState_NormalizeNormals = {sec = "D3D", len = 0x39, hash = "0x1289F499D4F87D6B", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x200, 0x403A4], ret = 4, regs = []}
+D3DDevice_SetRenderState_OcclusionCullEnable = {}
+D3DDevice_SetRenderState_PSTextureModes = {sec = "D3D", len = 0x22, hash = "0x76CA283CBFFE6419", k = [0x37C, 0x4000], ret = 4, regs = []}
+D3DDevice_SetRenderState_RopZCmpAlwaysRead = {sec = "D3D", len = 0x11, hash = "0x4F7F4A773101B2F1", count = 3, nth = 0, deep = true, calls = [[0xCE, "0x74D0EE641254D645", [[0xF, "0x992EC001666B3982"]]]], ret = 4, regs = []}
+D3DDevice_SetRenderState_RopZRead = {sec = "D3D", len = 0x11, hash = "0x4F7F4A773101B2F1", count = 3, nth = 1, deep = true, calls = [[0xCE, "0x74D0EE641254D645", [[0xF, "0x992EC001666B3982"]]]], ret = 4, regs = []}
+D3DDevice_SetRenderState_SampleAlpha = {}
+D3DDevice_SetRenderState_ShadowFunc = {sec = "D3D", len = 0x35, hash = "0xF346C616C28FF5C3", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x41E6C, 0xFFFFFE00], ret = 4, regs = []}
+D3DDevice_SetRenderState_Simple = {sec = "D3D", len = 0x27, hash = "0xFD83B1F6F3776DB0", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], ret = 0, regs = ["ecx", "edx"]}
+D3DDevice_SetRenderState_StencilCullEnable = {}
+D3DDevice_SetRenderState_StencilEnable = {sec = "D3D", len = 0x84, hash = "0xA85D1A4BBDA87FC", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x1E00, 0x2074, 0x4032C, 0x41D84], ret = 4, regs = []}
+D3DDevice_SetRenderState_StencilFail = {sec = "D3D", len = 0x6D, hash = "0x1AC579E0A6FC138", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x1E00, 0x40370, 0x41D84], ret = 4, regs = []}
+D3DDevice_SetRenderState_TextureFactor = {sec = "D3D", len = 0x51, hash = "0x5C7E9BC222FC9004", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x370], ret = 4, regs = []}
+D3DDevice_SetRenderState_TwoSidedLighting = {sec = "D3D", len = 0x63, hash = "0x489366A275331CEF", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x1000, 0x8038C], ret = 4, regs = []}
+D3DDevice_SetRenderState_VertexBlend = {sec = "D3D", len = 0x41, hash = "0x9009C90948A65018", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x200, 0x40328], ret = 4, regs = []}
+D3DDevice_SetRenderState_YuvEnable = {}
+D3DDevice_SetRenderState_ZEnable = {sec = "D3D", len = 0x8F, hash = "0x99E506796EF47097", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x140, "0xB265090C0ECEAA35", [[0xFA, "0xFB0FEB1CD8F3F37D"]]], [0xF0, "0x25D3E1E14453CB42", [[0x48, "0x353072E0DFDE33A6"], [0x68, "0x48B54173CEF6CCA6"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x59, "0xF666756884F24532", []], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]]], k = [0x2074, 0x4030C, 0x41D78], ret = 4, regs = []}
+D3DDevice_SetRenderTarget = {sec = "D3D", len = 0x12C, hash = "0xD44BB64C5A9F138D", calls = [[0x5C, "0x23CABB00661424AB", []], [0x5C, "0x23CABB00661424AB", []], [0x378, "0x877ED682BA468C03", [[0x32, "0x79A41FE5E122B9C"], [0x62, "0x39DF67CEF83C99D2"], [0x62, "0x39DF67CEF83C99D2"], [0x32, "0x79A41FE5E122B9C"], [0x12, "0x3CF97E0F4C449D89"], [0xF, "0x992EC001666B3982"], [0x59, "0xF666756884F24532"], [0x16, "0x1DBD5577E019815D"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x5A, "0xF8C920D8ED52163C"], [0xF0, "0x25D3E1E14453CB42"], [0x160, "0x55B6B09FE6331B4B"], [0x7F, "0x85A0636A155ACE1A"]]], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []]], k = [0x468, 0x46C, 0xFFF, 0xFFF, 0xFFF, 0x2070, 0x207C, 0x207C, 0x2080, 0x2080], regs = []}
+D3DDevice_SetScissors = {sec = "D3D", len = 0x197, hash = "0x47D1731FA9713507", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []], [0x9, "0x5AE13FDFB3B6A4DF", []]], k = [0x458, 0x45C, 0x9D0, 0x9D4, 0x9D8, 0x9DC, 0x21DC, 0x225C, 0x2260, 0x402B4, 0x402E0], ret = 12, regs = []}
+D3DDevice_SetScreenSpaceOffset = {sec = "D3D", len = 0x49, hash = "0xEDB8C83A80A7983E", calls = [[0xF0, "0x25D3E1E14453CB42", [[0x48, "0x353072E0DFDE33A6"], [0x68, "0x48B54173CEF6CCA6"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]]], k = [0x9E8, 0x9EC], ret = 8, regs = []}
+D3DDevice_SetShaderConstantMode = {sec = "D3D", len = 0x4, hash = "0xBD99E702AFA6BE75", count = 41, nth = 23, deep = true, regs = []}
+D3DDevice_SetSoftDisplayFilter = {sec = "D3D", len = 0x51, hash = "0x761EF21A3B182DED", k = [0x227C], ret = 4, regs = []}
+D3DDevice_SetStreamSource = {}
+D3DDevice_SetTexture = {sec = "D3D", len = 0x17A, hash = "0x139A399EF4D09416", calls = [[0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0xF4, 0x360, 0x800, 0xA78, 0xA78, 0xFFF, 0xFFF, 0x206C, 0x4000, 0x4800, 0x41B0C, 0x41B0C, 0x41B10, 0x41B1C, 0x80000, 0xFFF80000], ret = 8, regs = []}
+D3DDevice_SetTextureStageStateNotInline = {sec = "D3D", len = 0xEC, hash = "0x52377A3E3E06600C", calls = [[0x112, "0xA70D84A1E8D83DE9", [[0xF, "0x992EC001666B3982"]]], [0x3D, "0xAD4A3146467D1DCD", [[0xF, "0x992EC001666B3982"]]], [0x39, "0xA293CC3B791733F7", [[0xF, "0x992EC001666B3982"]]], [0x63, "0x6E8A3692C91471EB", [[0xF, "0x992EC001666B3982"]]]], k = [0x480F, 0xFFFFBFF1], ret = 12, regs = []}
+D3DDevice_SetTextureState_BorderColor = {sec = "D3D", len = 0x3D, hash = "0xAD4A3146467D1DCD", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x41B24], ret = 8, regs = []}
+D3DDevice_SetTextureState_BumpEnv = {sec = "D3D", len = 0x63, hash = "0x6E8A3692C91471EB", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x370, 0x41AD0], ret = 12, regs = []}
+D3DDevice_SetTextureState_ColorKeyColor = {sec = "D3D", len = 0x39, hash = "0xA293CC3B791733F7", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x40AE0], ret = 8, regs = []}
+D3DDevice_SetTextureState_TexCoordIndex = {sec = "D3D", len = 0x112, hash = "0xA70D84A1E8D83DE9", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x200, 0x454, 0x454, 0x454, 0x47F, 0x2400, 0x2401, 0x2402, 0x8511, 0x8512, 0xC03C, 0x30000, 0x40000, 0x41964, 0xFF000000, 0xFFFF0000], ret = 8, regs = []}
+D3DDevice_SetTile = {sec = "D3D", len = 0xBB, hash = "0xD2F03E1F18FB6242", calls = [[0x1EE, "0x607E4818957AF82D", [[0x6B, "0x5EFC803F2E3F144B"], [0x3F, "0x11A3E41515727657"], [0x3F, "0x11A3E41515727657"], [0x3F, "0x11A3E41515727657"]]], [0xC2, "0x337E037040022F7", [[0x6B, "0x5EFC803F2E3F144B"], [0x3F, "0x11A3E41515727657"]]]], k = [0x426, 0x211C, 0x211C, 0x227C, 0x227C, 0xFFFFFFF], ret = 8, regs = []}
+D3DDevice_SetTransform = {sec = "D3D", len = 0x10E, hash = "0x1D2E329B0688F1FD", calls = [[0x140, "0xB265090C0ECEAA35", [[0xFA, "0xFB0FEB1CD8F3F37D"]]], [0xF0, "0x25D3E1E14453CB42", [[0x48, "0x353072E0DFDE33A6"], [0x68, "0x48B54173CEF6CCA6"]]]], k = [0x44, 0x44, 0x44, 0x44, 0x44, 0x444, 0x444, 0x448, 0x448, 0x448, 0x44C, 0x750, 0x3F800000], ret = 8, regs = []}
+D3DDevice_SetVertexBlendModelView = {sec = "D3D", len = 0x12F, hash = "0xE30FD749465A4B3D", calls = [[0x48, "0x353072E0DFDE33A6", [[0x173, "0x73BF65E35595A8B4"]]], [0x70, "0x7D9C5AF64969EA58", []], [0x70, "0x7D9C5AF64969EA58", []]], k = [0x40, 0x40, 0x44, 0x44, 0x200, 0x4B0, 0x5B0, 0x7FFFFDFF, 0x80000000, 0xFFBFFB80, 0xFFFFFDFF], ret = 16, regs = []}
+D3DDevice_SetVertexShader = {sec = "D3D", len = 0x152, hash = "0xE33C34218A33DCEC", calls = [[0x139, "0x59D35C41E6742F40", []], [0x54, "0x4CDBD4A4D8695927", [[0xAA, "0x2D947814F1C6FF55"], [0x48, "0x353072E0DFDE33A6"]]], [0x80, "0x8086C30047D3C3E1", [[0xF, "0x992EC001666B3982"], [0x1E5, "0xA0CA4BC124527B12"], [0xF, "0x992EC001666B3982"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]], [0xF0, "0x25D3E1E14453CB42", [[0x48, "0x353072E0DFDE33A6"], [0x68, "0x48B54173CEF6CCA6"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]]], k = [0x70, 0x380, 0x380, 0x384, 0x388, 0x400, 0x1600, 0x4194C, 0x41950, 0x4195C, 0x41960, 0x41E94, 0x41EA0, 0x81E94], ret = 4, regs = []}
+D3DDevice_SetVertexShaderConstant1 = {}
+D3DDevice_SetVertexShaderConstant1Fast = {}
+D3DDevice_SetVertexShaderConstant4 = {}
+D3DDevice_SetVertexShaderConstantNotInlineFast = {}
+D3DDevice_SetVertexShaderInput = {sec = "D3D", len = 0x1AE, hash = "0xE5D53D0948B85C72", calls = [[0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x44, 0x48, 0x70, 0x88, 0x5F0, 0x5F4, 0x5F4, 0x5F4, 0x5F4, 0x5F4, 0x5F4, 0x5F8, 0x5F8, 0x5F8, 0x80000, 0x40000000, 0xBFFFFFFF, 0xFFF80000, 0xFFF80000], ret = 12, regs = []}
+D3DDevice_SetViewport = {sec = "D3D", len = 0x160, hash = "0x55B6B09FE6331B4B", calls = [[0x140, "0xB265090C0ECEAA35", [[0xFA, "0xFB0FEB1CD8F3F37D"]]], [0x197, "0x47D1731FA9713507", [[0xF, "0x992EC001666B3982"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x9, "0x5AE13FDFB3B6A4DF"], [0x9, "0x5AE13FDFB3B6A4DF"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]], [0x1E5, "0xA0CA4BC124527B12", [[0x125, "0xC5BEFFA008D20B44"]]]], k = [0x100, 0x9D0, 0x9D4, 0x9D8, 0x9DC, 0x9E0, 0x9E4, 0xFFF, 0xFFF, 0xFFF, 0xFFF, 0x2070, 0x207C, 0x2080], ret = 4, regs = []}
+D3DDevice_Swap = {sec = "D3D", len = 0xBC, hash = "0xA371DF452E118CAA", calls = [[0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]], [0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]], [0x1CF, "0xB200559EFE977DCA", [[0x58, "0x37B0E8147E89D7AE"], [0x12C, "0xD44BB64C5A9F138D"], [0x17A, "0x139A399EF4D09416"], [0x12F, "0xEE70A446B4EDC831"], [0x119, "0x1AAC6D989FA2B49"], [0xF, "0x992EC001666B3982"], [0x1B5, "0xBC90C2AB2D113A9D"], [0x17A, "0x767AA3DEE24A380"], [0x5E, "0xAA6DFFAA3E66E08B"], [0xF, "0x992EC001666B3982"]]], [0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]], [0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]], [0x102, "0x94EC4DA2DDFD7A6C", [[0xF, "0x992EC001666B3982"]]], [0x40, "0x6C5F043660345116", [[0xAD, "0x65BC38CE726F47AC"], [0x109, "0xB475BA6F99D0EBD0"]]], [0x444, "0xA6D1F6856737C0DC", [[0x33, "0x604AAFC69C6CA8A7"], [0x4D, "0x793EFFDBA3CC3CA7"], [0x5C, "0x23CABB00661424AB"], [0x5C, "0x23CABB00661424AB"], [0x4E, "0x1F36E2BD67978483"], [0x43, "0x23930C92013A3C5F"], [0x6, "0x23A795BF0B32CC0E"], [0x12, "0x756CE65CF0761A6"], [0x33, "0x957C5B5C51604B83"], [0x33, "0x957C5B5C51604B83"], [0xE, "0x972EB562F739465D"], [0x32C, "0xF60E98AC0555D734"]]]], k = [0x40, 0x3DC, 0x3E0, 0x2068, 0x2068, 0x2AD8, 0x2AD8, 0x2AD8, 0x2AD8, 0x2AD8], ret = 4, regs = []}
+D3DDevice_SwitchTexture = {sec = "D3D", len = 0x30, hash = "0x77FFE269C986D336", calls = [[0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], ret = 4, regs = ["ecx", "edx"]}
+D3DResource_BlockUntilNotBusy = {}
+D3DResource_IsBusy = {}
+D3D_BlockOnResource = {sec = "D3D", len = 0x78, hash = "0xB27AA6287B554830", calls = [[0x35, "0xCBE7179F091C68C3", []], [0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]], [0x35, "0xCBE7179F091C68C3", []], [0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]], [0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]]], k = [0x50000, 0x70000], ret = 4, regs = []}
+D3D_BlockOnTime = {sec = "D3D", len = 0xE6, hash = "0xA7EEEFCAB92E4D10", calls = [[0xAD, "0x65BC38CE726F47AC", [[0x173, "0x73BF65E35595A8B4"], [0xE3, "0xAB0EA8ED7D7E6A00"]]], [0x111, "0x1451662D3E9BA2E3", []], [0x61, "0x3E3E41B18A400532", []], [0x2D, "0xB31EDA6121B2F37", []], [0x61, "0x3E3E41B18A400532", []], [0x2D, "0xB31EDA6121B2F37", []]], k = [0x2458, 0x245C, 0x8000, 0x8000, 0x40100, 0x40110], ret = 8, regs = []}
+D3D_InitDefaultState = {sec = "D3D", len = 0xBA, hash = "0xE15D00C388095DE9", calls = [[0x10E, "0x1D2E329B0688F1FD", [[0x140, "0xB265090C0ECEAA35"], [0xF0, "0x25D3E1E14453CB42"]]], [0x5A, "0xF8C920D8ED52163C", [[0x27, "0xFD83B1F6F3776DB0"]]], [0x5A, "0xF8C920D8ED52163C", [[0x27, "0xFD83B1F6F3776DB0"]]], [0xEC, "0x52377A3E3E06600C", [[0x112, "0xA70D84A1E8D83DE9"], [0x3D, "0xAD4A3146467D1DCD"], [0x39, "0xA293CC3B791733F7"], [0x63, "0x6E8A3692C91471EB"]]], [0xEC, "0x52377A3E3E06600C", [[0x112, "0xA70D84A1E8D83DE9"], [0x3D, "0xAD4A3146467D1DCD"], [0x39, "0xA293CC3B791733F7"], [0x63, "0x6E8A3692C91471EB"]]], [0xEC, "0x52377A3E3E06600C", [[0x112, "0xA70D84A1E8D83DE9"], [0x3D, "0xAD4A3146467D1DCD"], [0x39, "0xA293CC3B791733F7"], [0x63, "0x6E8A3692C91471EB"]]], [0xEC, "0x52377A3E3E06600C", [[0x112, "0xA70D84A1E8D83DE9"], [0x3D, "0xAD4A3146467D1DCD"], [0x39, "0xA293CC3B791733F7"], [0x63, "0x6E8A3692C91471EB"]]], [0x49, "0xEDB8C83A80A7983E", [[0xF0, "0x25D3E1E14453CB42"], [0xF, "0x992EC001666B3982"], [0x1E5, "0xA0CA4BC124527B12"]]]], k = [0xF0, 0x13C, 0x168, 0x2088], ret = 0, regs = []}
+D3D_InternalAddRef = {sec = "D3D", len = 0x32, hash = "0x79A41FE5E122B9C", k = [0x50000, 0x70000, 0x80000, 0x80000], ret = 4, regs = []}
+D3D_InternalRelease = {sec = "D3D", len = 0x62, hash = "0x39DF67CEF83C99D2", calls = [[0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]]], k = [0xFFFF, 0x50000, 0x70000, 0x80000, 0xFFF80000, 0xFFF80000], ret = 4, regs = []}
+D3D_KickOffAndWaitForIdle = {sec = "D3D", len = 0x11, hash = "0x5072EAB10AF84A81", calls = [[0xE6, "0xA7EEEFCAB92E4D10", [[0xAD, "0x65BC38CE726F47AC"], [0x111, "0x1451662D3E9BA2E3"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"], [0x61, "0x3E3E41B18A400532"], [0x2D, "0xB31EDA6121B2F37"]]]], ret = 0, regs = []}
+D3D_MakeRequestedSpace = {sec = "D3D", len = 0x48, hash = "0x353072E0DFDE33A6", calls = [[0x173, "0x73BF65E35595A8B4", [[0xE6, "0xA7EEEFCAB92E4D10"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0xAD, "0x65BC38CE726F47AC"], [0xE3, "0xAB0EA8ED7D7E6A00"]]]], k = [0x200, 0x204], ret = 8, regs = []}
+D3D_SetFence = {sec = "D3D", len = 0xAD, hash = "0x65BC38CE726F47AC", calls = [[0x173, "0x73BF65E35595A8B4", [[0xE6, "0xA7EEEFCAB92E4D10"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0xAD, "0x65BC38CE726F47AC"], [0xE3, "0xAB0EA8ED7D7E6A00"]]], [0xE3, "0xAB0EA8ED7D7E6A00", [[0x34, "0x10F49DAD2EB4D3CD"]]]], k = [0x40, 0x4C, 0x4C, 0x4C, 0x50, 0x58, 0x41D70, 0x41D90], ret = 4, regs = []}
+Direct3D_CreateDevice = {sec = "D3D", len = 0xB4, hash = "0x311C5E116F5A8C26", calls = [[0x52E, "0x2CAE2D117C19E6FB", [[0xAD, "0xED9E56F88A16AC0B"], [0x162, "0x1B2471C920C758EE"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0xCF, "0xEAF987E3C842D4C9"], [0x63, "0x4E47FCCBC1AE746D"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x34, "0x7EB32B35DDE5C5BF"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0x90, "0xDA46BBF3826FDB3C"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0x1D, "0xB6FEF857C3841887"], [0xDE, "0xE1E03331FF1F0F0E"], [0x540, "0x105745CDA506D179"], [0x5C, "0x23CABB00661424AB"], [0x1D2, "0x66D0BA7217AB03E8"], [0x152, "0xE33C34218A33DCEC"], [0x12C, "0xD44BB64C5A9F138D"], [0xBA, "0xE15D00C388095DE9"], [0x39C, "0xBABC66078D0D1333"], [0x42, "0xB43EC7BE8F6B66B7"], [0x51, "0x761EF21A3B182DED"]]], [0x199, "0xA0AC952E8A65F521", [[0x11, "0x5072EAB10AF84A81"], [0xE3, "0xAB0EA8ED7D7E6A00"], [0x1D, "0xB6FEF857C3841887"], [0x11, "0xE1C2B427D7642E6C"], [0x119, "0x1F13B42D4914B43D"], [0x20, "0xD27E8E64BE393620"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x9C, "0x3E127CEF6093DFB6"], [0x1E, "0x25794508EBC6E332"], [0x1A6, "0x6F2D70B9E0272873"]]]], k = [0xAC0, 0x8000, 0x80000], ret = 24, regs = []}
+DirectSoundCreate = {sec = "DSOUND", len = 0x47, hash = "0x3BBCDFE434237F24", calls = [[0x1E, "0x77CF69460E7107DD", []], [0x6D, "0x54749E63BADEC62D", [[0x15, "0xA06C401FA8F9EA12"], [0x11, "0x2B6130851883E06E"], [0x1D, "0x936A8E6B64B4B1F7"], [0x129, "0xE2804F172F8B5DF"]]]], ret = 12, regs = []}
+DirectSoundCreateBuffer = {sec = "DSOUND", len = 0x57, hash = "0xC2431935FBC2C56E", calls = [[0x1E, "0x77CF69460E7107DD", []], [0x6D, "0x54749E63BADEC62D", [[0x15, "0xA06C401FA8F9EA12"], [0x11, "0x2B6130851883E06E"], [0x1D, "0x936A8E6B64B4B1F7"], [0x129, "0xE2804F172F8B5DF"]]], [0x9C, "0x71DC342A694E3431", [[0x1E, "0x77CF69460E7107DD"], [0x11, "0x2B6130851883E06E"], [0x18, "0x7267DDD0F33D17E1"], [0xE8, "0x4204F1B895E7AD86"]]]], ret = 8, regs = []}
+DirectSoundCreateStream = {}
+DirectSoundDoWork = {}
+DirectSoundUseFullHRTF = {sec = "DSOUND", len = 0x28, hash = "0xD2FFF96086B54B33", calls = [[0x1E, "0x77CF69460E7107DD", []], [0x1C, "0x921F01786B070255", []]], ret = 0, regs = []}
+DirectSoundUseLightHRTF = {sec = "DSOUND", len = 0x28, hash = "0xD2FFF96086B54B33", calls = [[0x1E, "0x77CF69460E7107DD", []], [0x1F, "0xBA5CF882E184E93", []]], ret = 0, regs = []}
+IDirectSoundBuffer_GetCurrentPosition = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", calls = [[0x55, "0xE60F054C4E847816", [[0x1E, "0x77CF69460E7107DD"], [0xD9, "0x7A90EC1C6FCE7C0"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_GetStatus = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x51, "0xBCCF9F0C46F7ABDF", [[0x1E, "0x77CF69460E7107DD"], [0x49, "0xBB078953B0B5ED36"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_Lock = {sec = "DSOUND", len = 0x30, hash = "0x5B6EA09A2CCF537D", calls = [[0xD6, "0xB2973715C6C9AD19", [[0x1E, "0x77CF69460E7107DD"], [0x55, "0xE60F054C4E847816"]]]], ret = 32, regs = []}
+IDirectSoundBuffer_Play = {sec = "DSOUND", len = 0x24, hash = "0x16089413899A14CC", calls = [[0x51, "0x9C8E2BA2A67E258F", [[0x1E, "0x77CF69460E7107DD"], [0x7C, "0xFE5A07683BE19909"]]]], ret = 16, regs = []}
+IDirectSoundBuffer_Release = {sec = "DSOUND", len = 0x16, hash = "0x4FA5AC4A92DAE1E3", ret = 4, regs = []}
+IDirectSoundBuffer_SetAllParameters = {}
+IDirectSoundBuffer_SetBufferData = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", calls = [[0xAE, "0x5A3DE3846E6F091E", [[0x1E, "0x77CF69460E7107DD"], [0x31, "0xB11A4F662AEBB498"], [0x8C, "0xA014E167D0F04C96"], [0x1A, "0x309DF38DE49DB2EC"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetConeOrientation = {sec = "DSOUND", len = 0x35, hash = "0xA75396ED26FDDEF8", deep = true, calls = [[0x67, "0xFA99C6F0228DF751", [[0x1E, "0x77CF69460E7107DD"], [0x52, "0x8668814357B99EFF"]]]], ret = 20, regs = []}
+IDirectSoundBuffer_SetConeOutsideVolume = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", deep = true, calls = [[0x52, "0xA3DA2686A7BE392F", [[0x1E, "0x77CF69460E7107DD"], [0x33, "0xD4B22403F65C81B9"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetCurrentPosition = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x51, "0xBCCF9F0C46F7ABDF", [[0x1E, "0x77CF69460E7107DD"], [0xF4, "0x9E143CF0A3A27D35"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetFilter = {}
+IDirectSoundBuffer_SetFormat = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x47, "0x5F31E5CF7D76BEA6"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetFrequency = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x24, "0xC046BA53B861F640"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetHeadroom = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x23, "0x7AD49519FCD1508B"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetI3DL2Source = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", deep = true, calls = [[0x52, "0xA3DA2686A7BE392F", [[0x1E, "0x77CF69460E7107DD"], [0xAF, "0x7762D9D11C248704"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetLoopRegion = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", calls = [[0x85, "0x1A27244AC3B17570", [[0x1E, "0x77CF69460E7107DD"], [0x1E, "0x55A9B42BDFAA965A"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetMaxDistance = {sec = "DSOUND", len = 0x24, hash = "0x3853FB9A0AFFA05F", deep = true, calls = [[0x56, "0x72D9FAB119B88023", [[0x1E, "0x77CF69460E7107DD"], [0x33, "0xB659AC4EE436D8A5"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetMinDistance = {sec = "DSOUND", len = 0x24, hash = "0x3853FB9A0AFFA05F", deep = true, calls = [[0x56, "0x72D9FAB119B88023", [[0x1E, "0x77CF69460E7107DD"], [0x33, "0xE58C3B63B8EE8CB9"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetMixBinVolumes = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", count = 2, nth = 1, deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x1D, "0x47CDFFB8109088B7"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetMixBins = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", count = 2, nth = 0, deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x1D, "0x47CDFFB8109088B7"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_SetMode = {sec = "DSOUND", len = 0x20, hash = "0x58625E847EC088E7", deep = true, calls = [[0x52, "0xA3DA2686A7BE392F", [[0x1E, "0x77CF69460E7107DD"], [0x26, "0x9406C5A9F13156C6"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetOutputBuffer = {}
+IDirectSoundBuffer_SetPlayRegion = {}
+IDirectSoundBuffer_SetPosition = {sec = "DSOUND", len = 0x35, hash = "0xA75396ED26FDDEF8", deep = true, calls = [[0x67, "0xFA99C6F0228DF751", [[0x1E, "0x77CF69460E7107DD"], [0x52, "0x5BE2A3B9055C6475"]]]], ret = 20, regs = []}
+IDirectSoundBuffer_SetRolloffCurve = {sec = "DSOUND", len = 0x24, hash = "0x16089413899A14CC", deep = true, calls = [[0x56, "0x31118AB4C8E139E2", [[0x1E, "0x77CF69460E7107DD"], [0x43, "0x689D7ED08C861BE0"]]]], ret = 16, regs = []}
+IDirectSoundBuffer_SetRolloffFactor = {sec = "DSOUND", len = 0x24, hash = "0x3853FB9A0AFFA05F", deep = true, calls = [[0x56, "0x72D9FAB119B88023", [[0x1E, "0x77CF69460E7107DD"], [0x33, "0x28C1FF10660FBC69"]]]], ret = 12, regs = []}
+IDirectSoundBuffer_SetVelocity = {sec = "DSOUND", len = 0x35, hash = "0xA75396ED26FDDEF8", deep = true, calls = [[0x67, "0xFA99C6F0228DF751", [[0x1E, "0x77CF69460E7107DD"], [0x52, "0x400B80E909DFC29B"]]]], ret = 20, regs = []}
+IDirectSoundBuffer_SetVolume = {sec = "DSOUND", len = 0x1C, hash = "0x3BA8DAE65E120FD6", deep = true, calls = [[0x4E, "0xE46B8FDA6F8BD284", [[0x1E, "0x77CF69460E7107DD"], [0x1C, "0xFC6E09B4AD4AB568"]]]], ret = 8, regs = []}
+IDirectSoundBuffer_Stop = {sec = "DSOUND", len = 0x18, hash = "0x6B88620E3F09B885", calls = [[0x4F, "0x8E32B086615BD924", [[0x1E, "0x77CF69460E7107DD"], [0x90, "0x5579419AD1A5093C"]]]], ret = 4, regs = []}
+IDirectSoundBuffer_StopEx = {sec = "DSOUND", len = 0x24, hash = "0x16089413899A14CC", calls = [[0x59, "0x3747B745B5CD70D5", [[0x1E, "0x77CF69460E7107DD"], [0x39, "0x7FC597D868C6CAE"]]]], ret = 16, regs = []}
+IDirectSoundBuffer_Unlock = {sec = "DSOUND", len = 0x5, hash = "0x94773B53804784A", ret = 20, regs = []}
+IDirectSoundStream_SetEG = {}
+IDirectSound_CommitDeferredSettings = {}
+IDirectSound_CommitEffectData = {}
+IDirectSound_CreateSoundBuffer = {sec = "DSOUND", len = 0x24, hash = "0xBBF11F9B43DBC968", calls = [[0x9C, "0x71DC342A694E3431", [[0x1E, "0x77CF69460E7107DD"], [0x11, "0x2B6130851883E06E"], [0x18, "0x7267DDD0F33D17E1"], [0xE8, "0x4204F1B895E7AD86"]]]], ret = 16, regs = []}
+IDirectSound_DownloadEffectsImage = {}
+IDirectSound_EnableHeadphones = {}
+IDirectSound_GetEffectData = {}
+IDirectSound_GetOutputLevels = {}
+IDirectSound_GetSpeakerConfig = {}
+IDirectSound_Release = {}
+IDirectSound_SetDistanceFactor = {sec = "DSOUND", len = 0x24, hash = "0xDE3C8721C54154FB", calls = [[0x62, "0x1C1ABFEA17A58C67", [[0x1E, "0x77CF69460E7107DD"], [0x7C, "0x25D50306DCB71C18"]]]], ret = 12, regs = []}
+IDirectSound_SetDopplerFactor = {sec = "DSOUND", len = 0x24, hash = "0xDE3C8721C54154FB", calls = [[0x62, "0xE980D9C47520CF", [[0x1E, "0x77CF69460E7107DD"], [0x7C, "0x25D50306DCB71C18"]]]], ret = 12, regs = []}
+IDirectSound_SetEffectData = {}
+IDirectSound_SetI3DL2Listener = {sec = "DSOUND", len = 0x20, hash = "0xFE4AEA0C39023D83", calls = [[0xFC, "0x2AE82F0F14BB80A1", [[0x1E, "0x77CF69460E7107DD"], [0x7C, "0x25D50306DCB71C18"]]]], ret = 12, regs = []}
+IDirectSound_SetMixBinHeadroom = {sec = "DSOUND", len = 0x20, hash = "0xFE4AEA0C39023D83", calls = [[0x5F, "0xDA03582942EADF79", [[0x1E, "0x77CF69460E7107DD"], [0x45, "0x7546165D9B01E233"]]]], ret = 12, regs = []}
+IDirectSound_SetOrientation = {}
+IDirectSound_SetPosition = {}
+IDirectSound_SetRolloffFactor = {sec = "DSOUND", len = 0x24, hash = "0xDE3C8721C54154FB", calls = [[0x62, "0x58AC8C90126D06F", [[0x1E, "0x77CF69460E7107DD"], [0x7C, "0x25D50306DCB71C18"]]]], ret = 12, regs = []}
+IDirectSound_SetVelocity = {}
+IDirectSound_SynchPlayback = {}
+Lock2DSurface = {sec = "D3D", len = 0x9B, hash = "0x2CFB04890FE9A81D", calls = [[0x78, "0xB27AA6287B554830", [[0x35, "0xCBE7179F091C68C3"], [0xE6, "0xA7EEEFCAB92E4D10"], [0x35, "0xCBE7179F091C68C3"], [0xE6, "0xA7EEEFCAB92E4D10"], [0xE6, "0xA7EEEFCAB92E4D10"]]], [0x233, "0xFCDCC7D3B887C2A4", []]], k = [0x40, 0xF0000000], ret = 24, regs = []}
+WSACancelOverlappedIO = {}
+WSAGetLastError = {}
+WSAGetOverlappedResult = {}
+WSARecv = {}
+WSARecvFrom = {}
+WSASend = {}
+WSASendTo = {}
+WSAStartup = {}
+XAudioDownloadEffectsImage = {sec = "DSOUND", len = 0x202, hash = "0x75BB5A57E10780B", calls = [[0x1E, "0x77CF69460E7107DD", []], [0x67, "0xB39F2733EFFB67AD", [[0x2E, "0xA4B3020F0A3ABBE1"]]], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0xA, "0xAA7017F44A01F9C0", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x21, "0x48CBB815C3158398", [[0x17, "0x5A64BF0410E06F62"]]], [0x18B, "0xAE64B572AF3ADFD4", [[0x17, "0x5A64BF0410E06F62"], [0x17, "0x5A64BF0410E06F62"], [0x2E, "0xA4B3020F0A3ABBE1"], [0x2E, "0xA4B3020F0A3ABBE1"]]], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x3B, "0x7F4C7A1D7FB6BB96", [[0x3E, "0xDE134FA8ED982BA2"], [0x2E, "0xA4B3020F0A3ABBE1"]]], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x68, "0x829E92F3AB13DCA8", [[0xE1, "0x123F7CDBF7EE964F"], [0x47, "0x3C9C8473EBD55462"]]], [0xED, "0xC5A7406E1D80A4B9", [[0x17, "0x5A64BF0410E06F62"]]], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x28, "0x1E9DB1E0296AC893", []], [0x64, "0x38E54145D1415FCA", [[0x1E, "0x77CF69460E7107DD"], [0x22, "0x467E10A3AE73322E"], [0x2F, "0x1C034E3D7F485CF6"]]], [0x1E, "0xB469165BD01FD1A3", [[0x17, "0x5A64BF0410E06F62"]]], [0x34, "0xDAF0A3B733E74EA0", [[0x18, "0x618371FDBBDA3407"], [0x99, "0xE9FB193B429B8F08"]]], [0x1E, "0x1A3A59C39301849C", [[0x17, "0x5A64BF0410E06F62"]]]], k = [0xFFFF, 0xFFFF, 0x7FF8FFF2, 0x80070000, 0x80070000, 0x8007000E, 0x88780032], ret = 16, regs = []}
+XInitDevices = {sec = "XPP", len = 0x8E, hash = "0xD8B1D7BD45620CA2", calls = [[0x5A, "0xCE45BB07D2B70E78", []], [0x123, "0xA4EA209134227786", []], [0xC, "0xE51B784F4912F43", [[0x1C5, "0x45EA4087BCF19DE1"]]], [0x9F, "0x6FB855D7E47FC803", [[0x30, "0x476A4AB45D1F264A"]]], [0x42, "0x402BFFC566846F36", [[0x79, "0x8C815D284952FCDC"]]]], k = [0xA0, 0xA1, 0xA4], ret = 8, regs = []}
+XInputClose = {sec = "XPP", len = 0xC, hash = "0xE51B784F4912F43", calls = [[0xA1, "0x98463B4F18DCE530", [[0x1E, "0xFF194F8C1EBD8CA5"]]]], ret = 4, regs = []}
+XInputGetState = {sec = "XPP", len = 0x6F, hash = "0x3C61D8E480748B52", k = [0xA3, 0xA3, 0x48F], ret = 8, regs = []}
+XInputOpen = {sec = "XPP", len = 0x56, hash = "0xADCB23E069376F62", calls = [[0x2B, "0x3AFC17F845C76821", []], [0x2E, "0xA4B3020F0A3ABBE1", []], [0x234, "0x9BBE1ACD47CD76A3", [[0x6A, "0xCC56D466B83A74CB"], [0xAB, "0x27AA026C805261A4"], [0xED, "0xFA42D5F71A831284"], [0xED, "0xFA42D5F71A831284"], [0x6E, "0x396F322CFE0035A0"], [0xA1, "0x98463B4F18DCE530"]]], [0x2E, "0xA4B3020F0A3ABBE1", []]], ret = 16, regs = []}
+XInputSetState = {sec = "XPP", len = 0x36, hash = "0xDC1A4C50DC2685DF", calls = [[0x34, "0xFB370E77E779415B", [[0x16, "0x2A2415B0B95298E5"], [0x16, "0x2A2415B0B95298E5"]]]], k = [0x40, 0x41, 0xA3], ret = 8, regs = []}
+XLaunchNewImageA = {sec = ".text", len = 0x113, hash = "0x7086DB8251424E13", calls = [[0x50, "0x1D845CA543EB074", [[0x3B, "0xDC2BA2A19B4CAAA0"]]], [0x45, "0x8DADCA35D18C005", [[0xDA, "0xC422275F4D4F01F7"]]]], k = [0x40, 0x44, 0x5C, 0x64, 0x168, 0x208, 0xFFFFFC7C, 0xFFFFFC7C, 0xFFFFFE84, 0xFFFFFE84, 0xFFFFFE84, 0xFFFFFE84], ret = 8, regs = []}
+XMountUtilityDrive = {sec = ".text", len = 0x105, hash = "0xAE7D3CB029BED347", calls = [[0x204, "0x517B07EDE49F94A1", [[0x1EF, "0xFE71CB91637C790B"]]], [0x57, "0x35E738CB71CF6CCB", [[0x74, "0x24D08268176620FA"], [0x119, "0x9AF6541964E9CA55"]]], [0x316, "0xCDD993017D11F7E3", [[0x17, "0x5A64BF0410E06F62"], [0x4, "0x8D1AC00050A2EA5F"], [0xAA, "0x26810E04323EEB4A"], [0x2E, "0xA4B3020F0A3ABBE1"], [0x1D, "0x345B18AE6CE600A0"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x17, "0x5A64BF0410E06F62"]]], [0x78, "0x31DF218FE930CC6B", []], [0x316, "0xCDD993017D11F7E3", [[0x17, "0x5A64BF0410E06F62"], [0x4, "0x8D1AC00050A2EA5F"], [0xAA, "0x26810E04323EEB4A"], [0x2E, "0xA4B3020F0A3ABBE1"], [0x1D, "0x345B18AE6CE600A0"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x17, "0x5A64BF0410E06F62"]]], [0x78, "0x31DF218FE930CC6B", []], [0x17, "0x5A64BF0410E06F62", [[0x2E, "0xA4B3020F0A3ABBE1"]]]], k = [0x4000, 0xFFFFFEEC, 0xFFFFFEEC, 0xFFFFFEEC], ret = 4, regs = []}
+XNetCreateKey = {}
+XNetDnsLookup = {}
+XNetDnsRelease = {}
+XNetGetEthernetLinkStatus = {}
+XNetGetTitleXnAddr = {}
+XNetInAddrToXnAddr = {}
+XNetRandom = {}
+XNetRegisterKey = {}
+XNetStartup = {sec = ".text", len = 0xE, hash = "0x972EB562F739465D", calls = [[0x52, "0x856A24D556B472D1", [[0x2E, "0x944212381B011254"]]]], ret = 4, regs = []}
+XNetUnregisterKey = {}
+XNetXnAddrToInAddr = {}
+XOnlineCleanup = {}
+XOnlineStartup = {}
+_CIacos = {sec = ".text", len = 0x14, hash = "0x242CEA3CB8F35082", calls = [[0x16, "0xC97C95373548D0C1", []], [0xAE, "0xECA88B2666FCEC33", [[0x17, "0xF81CE75911DCA1F"], [0xD, "0x2C9670118DBFA776"], [0x2A, "0xFF8C47D71A6F8F0B"], [0x19, "0xE0ABAB34218B76AB"], [0xD, "0x2C9670118DBFA776"], [0x3C, "0x274B0770BF01B42F"]]]], ret = 0, regs = []}
+_CIasin = {sec = ".text", len = 0x14, hash = "0x242CEA3CB8F35082", calls = [[0x16, "0xC97C95373548D0C1", []], [0xAE, "0x67B152AC9353F8E6", [[0x17, "0xF81CE75911DCA1F"], [0xD, "0x2C9670118DBFA776"], [0x2A, "0xFF8C47D71A6F8F0B"], [0x19, "0xE0ABAB34218B76AB"], [0xD, "0x2C9670118DBFA776"], [0x3C, "0x274B0770BF01B42F"]]]], ret = 0, regs = []}
+accept = {}
+bind = {}
+closesocket = {}
+connect = {}
+crt_acos = {sec = ".text", len = 0xAE, hash = "0xECA88B2666FCEC33", calls = [[0x17, "0xF81CE75911DCA1F", []], [0xD, "0x2C9670118DBFA776", []], [0x2A, "0xFF8C47D71A6F8F0B", [[0x3C, "0x274B0770BF01B42F"]]], [0x19, "0xE0ABAB34218B76AB", []], [0xD, "0x2C9670118DBFA776", []], [0x3C, "0x274B0770BF01B42F", [[0xDD, "0xDC0DDB108AE82296"]]]], k = [0x3FF00000, 0x80000000], ret = 0, regs = ["eax"]}
+crt_asin = {sec = ".text", len = 0xAE, hash = "0x67B152AC9353F8E6", calls = [[0x17, "0xF81CE75911DCA1F", []], [0xD, "0x2C9670118DBFA776", []], [0x2A, "0xFF8C47D71A6F8F0B", [[0x3C, "0x274B0770BF01B42F"]]], [0x19, "0xE0ABAB34218B76AB", []], [0xD, "0x2C9670118DBFA776", []], [0x3C, "0x274B0770BF01B42F", [[0xDD, "0xDC0DDB108AE82296"]]]], k = [0x3FF00000, 0x80000000], ret = 0, regs = ["eax"]}
+crt_atan = {}
+crt_cos = {}
+crt_log = {}
+crt_log10 = {}
+crt_pow = {sec = ".text", len = 0x1C5, hash = "0x1FBDF1CEC7DD4478", calls = [[0x17, "0xF81CE75911DCA1F", []], [0x43, "0xC183DE6D8075AD7B", []], [0x15, "0x757C8F706D6E0101", []], [0xD, "0x2C9670118DBFA776", []], [0xA3, "0x9D93B46C954327E1", [[0x3C, "0x274B0770BF01B42F"], [0x17, "0x940B754406130E3A"]]], [0xD, "0x2C9670118DBFA776", []], [0x17, "0x940B754406130E3A", []], [0x43, "0xC183DE6D8075AD7B", []], [0x43, "0xC183DE6D8075AD7B", []], [0x152, "0x35E33A1ED25339AA", [[0x61, "0x5EAA885890332E82"]]], [0xD, "0x2C9670118DBFA776", []], [0x28, "0x6657862FD2372AE", []], [0xD, "0x2C9670118DBFA776", []], [0xD, "0x2C9670118DBFA776", []], [0xD, "0x2C9670118DBFA776", []], [0x28, "0x6657862FD2372AE", []]], k = [0x7FF00000, 0x7FF00000, 0x7FF00000, 0x7FF00000, 0x7FF00000, 0x7FFFFFFF], ret = 0, regs = ["eax"]}
+crt_sin = {}
+crt_sqrt = {}
+crt_tan = {}
+getsockname = {}
+getsockopt = {}
+ioctlsocket = {}
+listen = {}
+recv = {}
+recvfrom = {}
+select = {}
+send = {}
+sendto = {}
+setsockopt = {}
+shutdown = {}
+socket = {}
+
+[anchors]
+D3D_Streams_ref = {sec = "D3D", len = 0x199, hash = "0xA0AC952E8A65F521", calls = [[0x11, "0x5072EAB10AF84A81", [[0xE6, "0xA7EEEFCAB92E4D10"]]], [0xE3, "0xAB0EA8ED7D7E6A00", [[0x34, "0x10F49DAD2EB4D3CD"]]], [0x1D, "0xB6FEF857C3841887", []], [0x11, "0xE1C2B427D7642E6C", []], [0x119, "0x1F13B42D4914B43D", [[0x62, "0x39DF67CEF83C99D2"], [0x62, "0x39DF67CEF83C99D2"], [0x4E, "0x1F36E2BD67978483"], [0x4E, "0x1F36E2BD67978483"], [0xBB, "0xD2F03E1F18FB6242"], [0xBB, "0xD2F03E1F18FB6242"]]], [0x20, "0xD27E8E64BE393620", [[0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x1E, "0x25794508EBC6E332", [[0x1DE, "0x586E8ECD29842B28"]]], [0x1A6, "0x6F2D70B9E0272873", [[0xC2, "0x337E037040022F7"], [0x173, "0xDB290C2DDF69DF78"], [0xE8, "0xB62FE4EF588C7ECA"], [0x191, "0xDB54C5A494184BD0"], [0x1FD, "0x9A8F974B9F89A1A7"], [0x97, "0x5C1D22EC071928F0"]]]]}
+
+[data]
+D3D_DeferredTextureState = {in = "D3DDevice_SetTextureStageStateNotInline", insn = 13, op = "disp"}
+D3D_Device = {in = "D3DDevice_SetRenderState_Simple", insn = 0, op = "disp"}
+D3D_DirtyFlags = {in = "D3DDevice_LightEnable", insn = 55, op = "disp"}
+D3D_IndexData = {}
+D3D_RenderState = {in = "D3DDevice_SetPixelShader", insn = 101, op = "imm"}
+D3D_SimpleRenderStateEncode = {in = "D3DDevice_SetRenderStateNotInline", insn = 4, op = "disp"}
+D3D_Streams = {in = "D3D_Streams_ref", insn = 128, op = "imm"}
+D3D_pDevice = {in = "CDevice_KickOff", insn = 12, op = "disp"}
+DSound_StreamVtable = {}
+DSound_StreamVtable2 = {}
+XPP_GamepadType = {}
+XPP_MemoryUnitType = {}

@@ -144,7 +144,7 @@ if(HAVE_GEN)
         -Wl,--end-group)
 
     nx_generate_nacp(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ct3.nacp
-        NAME "Crazy Taxi 3 (Xbox recomp)" AUTHOR "FurryLilManChild" VERSION "0.5.0")
+        NAME "Crazy Taxi 3 (Xbox recomp)" AUTHOR "FurryLilManChild" VERSION "0.3.0")
     set(ICON ${HOST}/icon.jpg)
     if(EXISTS ${ICON})
         nx_create_nro(ct3 NACP ${CMAKE_CURRENT_BINARY_DIR}/ct3.nacp ICON ${ICON})

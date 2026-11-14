@@ -1,14 +1,14 @@
-# Builds the Windows PC test build of sheroes-nx (branch xbe-recomp): XboxXBE-Recomp's Windows host with the Switch's
+# Builds the Windows PC test build of CT3-nx (branch xbe-recomp): XboxXBE-Recomp's Windows host with the Switch's
 # Vulkan renderer (build-pc\CT3-vk.exe) and the D3D12 one (build-pc\CT3-d3d12.exe). Every step's full output
 # goes to out\logs\.
 #
-# Usage (from C:\sheroes-nx): powershell -ExecutionPolicy Bypass -File tools\win\build_pc.ps1 [-Jobs N] [-Clean]
+# Usage (from C:\CT3-nx): powershell -ExecutionPolicy Bypass -File tools\win\build_pc.ps1 [-Jobs N] [-Clean]
 #   -Jobs   parallel compile jobs (default: half the logical CPUs, at most 8)
 #   -Clean  delete build-pc first
 #
 # Steps: copy default.xbe from assets\game_root into game\assets (the recompiler reads it there; it stays out of git),
 # configure, build the tools, recompile default.xbe into game\generated\game, compile and link both executables.
-# At run time the game is read from C:\sheroes-nx\assets (the .iso there, or default.xbe with its folders).
+# At run time the game is read from C:\CT3-nx\assets (the .iso there, or default.xbe with its folders).
 
 param(
     [int]$Jobs = 0,

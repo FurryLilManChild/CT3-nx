@@ -1,4 +1,4 @@
-# Builds switch_sd\switch\sheroes-nx\ beside the repo: ct3.nro, the default settings, LICENSES.txt and an empty game\
+# Builds switch_sd\switch\ct3\ beside the repo: ct3.nro, the default settings, LICENSES.txt and an empty game\
 # folder for the player's own files. Nothing of the game goes in: the player copies those.
 # package_switch.ps1 [-Build build-switch-pgo]  (run tools/make_licenses.py first when a license changes)
 param([string]$Build = 'build-switch')

@@ -308,7 +308,7 @@ const uint8_t* StreamData(const State& s, int stream) {
         if (c.data) return reinterpret_cast<const uint8_t*>(reinterpret_cast<uintptr_t>(c.data) - (c.span.from - c.span.base));
     }
     const auto& st = s.streams[size_t(stream)];
-    return static_cast<const uint8_t*>(kernel::HostPtr(mem::VirtualFromPhysical(kernel::R32(st.vb + kResData))));
+    return static_cast<const uint8_t*>(kernel::HostPtr(mem::VirtualFromPhysical(kernel::R32(st.vb + kResData)) + st.offset));
 }
 
 constexpr uint32_t kStrideAlign = 4;            // the input assembler reads strides in dwords
@@ -533,7 +533,7 @@ bool DrawStreamSpans(const State& s, uint32_t prim, uint32_t start, uint32_t cou
     for (int i = 0; i < 16; i++) {
         if (!end[i]) continue;
         StreamSpan& sp = out[size_t(i)];
-        sp.base = mem::VirtualFromPhysical(kernel::R32(s.streams[size_t(i)].vb + kResData));
+        sp.base = mem::VirtualFromPhysical(kernel::R32(s.streams[size_t(i)].vb + kResData)) + s.streams[size_t(i)].offset;
         sp.from = sp.base + first_vertex * stride[i];
         sp.bytes = (span - 1) * stride[i] + std::max(stride[i], end[i]);
     }

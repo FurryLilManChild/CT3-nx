@@ -61,6 +61,22 @@ X86Func* Find(uint32_t guest);
 #define SYM_IDirectSoundBuffer_SetConeAngles FFFFFF11
 #define HAS_IDirectSoundBuffer_SetConeAngles 0
 #endif
+#ifndef SYM_IDirectSoundBuffer_SetConeOrientation  // CT3-nx: XDK 4531 games call it
+#define SYM_IDirectSoundBuffer_SetConeOrientation FFFFFF30
+#define HAS_IDirectSoundBuffer_SetConeOrientation 0
+#endif
+#ifndef SYM_IDirectSoundBuffer_SetConeOutsideVolume  // CT3-nx: XDK 4531 games call it
+#define SYM_IDirectSoundBuffer_SetConeOutsideVolume FFFFFF31
+#define HAS_IDirectSoundBuffer_SetConeOutsideVolume 0
+#endif
+#ifndef SYM_IDirectSoundBuffer_SetMode  // CT3-nx: XDK 4531 games call it
+#define SYM_IDirectSoundBuffer_SetMode FFFFFF32
+#define HAS_IDirectSoundBuffer_SetMode 0
+#endif
+#ifndef SYM_IDirectSoundBuffer_SetRolloffFactor  // CT3-nx: XDK 4531 games call it
+#define SYM_IDirectSoundBuffer_SetRolloffFactor FFFFFF33
+#define HAS_IDirectSoundBuffer_SetRolloffFactor 0
+#endif
 #ifndef SYM_IDirectSoundBuffer_SetAllParameters
 #define SYM_IDirectSoundBuffer_SetAllParameters FFFFFF06
 #define HAS_IDirectSoundBuffer_SetAllParameters 0
@@ -142,6 +158,7 @@ struct Voice {
     std::vector<float> curve;  // rolloff
     bool is3d = false;
     uint32_t mode = 0;  // DS3DMODE: 1 head relative, 2 disabled
+    float rolloff = -1;  // CT3-nx: IDirectSoundBuffer_SetRolloffFactor, below 0 the listener's
     float p[3] = {}, min_dist = 1, max_dist = 1e9f;
     // ADPCM block cache
     int64_t block = -1;
@@ -268,7 +285,7 @@ void Levels(Voice& v, float g[8][2]) {
     float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     float att = 1;
     if (dist > v.min_dist && v.curve.empty()) {
-        att = std::pow(v.min_dist / std::min(dist, v.max_dist), g_rolloff);
+        att = std::pow(v.min_dist / std::min(dist, v.max_dist), v.rolloff >= 0 ? v.rolloff : g_rolloff);
     } else if (dist > v.min_dist && v.max_dist > v.min_dist) {
         // points spread evenly from min to max distance, 1.0 at min
         float at = (std::min(dist, v.max_dist) - v.min_dist) / (v.max_dist - v.min_dist) * v.curve.size();
@@ -595,7 +612,8 @@ static void AuditExports() {
         SYM(CDirectSoundStream_SetMixBinVolumes), SYM(CDirectSoundStream_SetMixBins), SYM(CDirectSoundStream_SetMaxDistance),
         SYM(CDirectSoundStream_SetMinDistance), SYM(CDirectSoundStream_SetPosition), SYM(CDirectSoundStream_SetVelocity),
         SYM(CDirectSoundStream_SetI3DL2Source), SYM(IDirectSoundStream_SetEG), SYM(IDirectSoundBuffer_SetEG),
-        SYM(IDirectSoundBuffer_Pause)};
+        SYM(IDirectSoundBuffer_Pause), SYM(IDirectSoundBuffer_SetConeOrientation), SYM(IDirectSoundBuffer_SetConeOutsideVolume),
+        SYM(IDirectSoundBuffer_SetMode), SYM(IDirectSoundBuffer_SetRolloffFactor)};
     std::string left;
     // the library's own section: the WMA decoder shares the export ids and touches no DSOUND object
     uint32_t lo = 0, hi = 0;
@@ -875,6 +893,18 @@ BUFFER(SetPitch, 2) {
     return 0;
 }
 BUFFER(SetConeAngles, 4) { return 0; }  // cones are not mixed (as SetVelocity)
+// CT3-nx: the rest of the 3D setters Crazy Taxi 3 (XDK 4531) calls; their original code would run on the host's buffer
+// objects. Cones are not mixed.
+BUFFER(SetConeOrientation, 5) { return 0; }
+BUFFER(SetConeOutsideVolume, 3) { return 0; }
+BUFFER(SetMode, 3) {  // (this, DS3DMODE, apply)
+    v.mode = a[1];
+    return 0;
+}
+BUFFER(SetRolloffFactor, 3) {  // (this, factor, apply)
+    v.rolloff = std::max(0.0f, F32(a[1]));
+    return 0;
+}
 BUFFER(SetEG, 2) {
     LOG_FIRST(1, "audio: buffer SetEG accepted; hardware envelope playback remains unsupported");
     return 0;

@@ -1,0 +1,64 @@
+# XDK 4531 library data layouts the runtime reads or writes (CT3-nx). Each value is proven by Crazy Taxi 3: High
+# Roller's default.xbe (title 53450004, SHA-256 eceb4aa0...dbdb87c) code at the address given, disassembled with
+# capstone. Where XbSymbolDatabase (Cxbx-Reloaded, MIT; its signature data read as a reference only) derived the same
+# offset from its own 4531 signatures, that is noted as "(XbSymbolDatabase agrees)".
+# 4531's CDevice is laid out differently from 5233, 5659 and 5849 almost everywhere: nothing here is copied.
+[layout]
+# D3D8 CDevice, the static device at 0x1026D0 (Direct3D_CreateDevice 0xF6916: mov edi, 0x1026D0; 0xF6923 stores it in
+# D3D__pDevice 0x1051D0)
+CDevice_Push          = 0x0     # every pusher, e.g. D3DDevice_SetRenderState_MultiSampleAntiAlias 0xF4A77 reads it, 0xF4A79 compares with +4, calls MakeSpace 0xF8930
+CDevice_PushThreshold = 0x4     # D3DDevice_SetRenderState_MultiSampleAntiAlias 0xF4A79: cmp eax, [esi + 4]
+CDevice_BaseVertex    = 0x1C    # D3DDevice_DrawIndexedVertices 0xF7C1E passes [esi + 0x1C] to the per-draw state flush 0xFE7D0
+CDevice_IndexBuffer   = 0x38C   # no D3DDevice_SetIndices is linked; the device teardown 0xFB9EE releases the resource at [esi + 0x38C] before the textures and palettes, as 5233 and 5849 release IndexBuffer (also VertexShader + 0xC, as in both)
+CDevice_ZScale        = 0x450   # D3D_UpdateProjectionViewportTransform 0xF3AC6: (MaxZ - MinZ) * [edx + 0x450]
+CDevice_SuperSampleX  = 0x458   # D3D_UpdateProjectionViewportTransform 0xF3A76 scales viewport Width by it; D3DDevice_SetRenderTarget 0xF58B4 stores it
+CDevice_SuperSampleY  = 0x45C   # D3D_UpdateProjectionViewportTransform 0xF3A9C scales viewport Height by it; D3DDevice_SetRenderTarget 0xF58A4 stores it
+CDevice_Transforms    = 0x750   # D3DDevice_SetTransform 0xF5096: lea edi, [type * 64 + ebx + 0x750], 16 dwords
+CDevice_Textures      = 0xA78   # D3DDevice_SetTexture 0xF61E0 reads, 0xF6219 stores [stage] (XbSymbolDatabase agrees)
+CDevice_Palettes      = 0xA88   # D3DDevice_SetPalette 0xF635D reads, 0xF6395 stores [stage] (XbSymbolDatabase agrees)
+CDevice_RenderTarget  = 0x2070  # D3DDevice_GetRenderTarget 0xF5D55 returns it (XbSymbolDatabase agrees)
+CDevice_Depth         = 0x2074  # D3DDevice_GetDepthStencilSurface 0xF5D75 returns it (XbSymbolDatabase agrees)
+CDevice_BackBuffer    = 0x207C  # D3DDevice_GetBackBuffer 0xF598D returns [0x207C + 0 * 4] for index 0
+CDevice_FrontBuffer   = 0x2080  # D3DDevice_GetBackBuffer 0xF597F: index -1 becomes 1, [0x207C + 1 * 4]
+CDevice_SwapCount     = 0x2AD8  # D3DDevice_Swap 0xF94F6 and 0xF9532 increment it, 0xF9561 returns it
+CDevice_Size          = 0x2B00  # Direct3D_CreateDevice 0xF6961 (and D3DDevice_Release 0xF520B) clear 0xAC0 dwords of the device
+CDevice_Flags             = 0x8    # Direct3D_CreateDevice 0xF690F-0xF6939 ors BehaviorFlags & 0x10 into [0x1026D8]; DrawIndexedVertices 0xF7C35 ors 0x800 into [esi + 8]
+CDevice_Time              = 0x30   # D3D_BlockOnResource 0xF89E5 passes [edx + 0x30] to D3D_BlockOnTime; D3D_SetFence 0xF86A9 stores the next one
+CDevice_PixelShader       = 0x370  # D3DDevice_SetPixelShader 0xF800E reads, 0xF8014 stores the handle (XbSymbolDatabase agrees)
+CDevice_VertexShader      = 0x380  # D3DDevice_SetVertexShader 0xF7321 reads, 0xF7378 stores the handle (XbSymbolDatabase agrees)
+CDevice_BackBufferScale   = 0x468  # the frame buffer init 0xFAFCB stores the X scale as a float, 0xFAFE4 the Y scale at +4; SetRenderTarget 0xF5497/0xF5491 reads them
+CDevice_Viewport          = 0x9D0  # D3DDevice_SetViewport 0xF5E9B to 0xF5EBF stores X, Y, Width, Height, MinZ, MaxZ
+CDevice_ScreenSpaceOffset = 0x9E8  # D3DDevice_SetScreenSpaceOffset 0xF6883 stores x + 0.53125, 0xF6893 y + 0.53125 at +4
+CDevice_AutoDepth         = 0x2088 # D3D_InitDefaultState 0xFAD78 reads it
+# the miniport is embedded at +0x227C (its vertical blank handler 0xFBF50 runs with ecx = it); 4531's miniport keeps
+# the fields in 5849's order but 0x38 further in: each value below is miniport + (5849's offset + 0x38)
+CDevice_VBlankCallback    = 0x2444 # the vertical blank handler 0xFC05E reads [miniport + 0x1C8] and calls it at 0xFC0B4
+CDevice_VBlankEvent       = 0x2448 # the vertical blank handler 0xFC051 KeSetEvent(miniport + 0x1CC); D3DDevice_BlockUntilVerticalBlank 0xF525B clears its SignalState and waits on it (XbSymbolDatabase agrees)
+CDevice_DisplayFlags      = 0x2468 # the vertical blank handler 0xFBFF2 tests 0x1000000 in [miniport + 0x1EC]; the mode set 0xF8B8F tests it at the device
+CDevice_VBlankCount       = 0x2474 # the mode set 0xF8C01 reads it, 0xF8C15 stores it + 1; the vertical blank handler 0xFBF9F stores [miniport + 0x1F8]
+# CDevice_Field, CDevice_GammaRamps and CDevice_GammaPending are left out: the title links no D3DDevice_SetGammaRamp
+# or field status query. (The flip code 0xFBEEA uses pending flags at miniport + 0x81C + index * 4 and ramps at
+# miniport + 0x21C + index * 0x300, 0x40 further in than 5849, not 0x38: unverified against a SetGammaRamp.)
+# D3D8 globals
+DirtyFlags_Texture    = 0x4800  # D3DDevice_SetTexture 0xF6255 ors it into D3D__DirtyFlags (0x102258)
+TextureState_Stage    = 32      # D3DDevice_SetTextureStageStateNotInline 0xF431B: [stage * 32 + type] dwords
+Stream_Size           = 12      # the vertex state push 0xFE865: lea esi, [n + n * 2], then [esi * 4 + 0x1051D8]
+Stream_Stride         = 0x0     # the vertex state push 0xFE868 reads the stride at D3D__Streams + n * 12
+Stream_Buffer         = 0x8     # the vertex state push 0xFE8A9 reads the vertex buffer at 0x1051E0 = D3D__Streams + 8 (offset at +4, 0xFE8C1)
+PixelShader_Definition = 0x8  # D3DDevice_SetPixelShader 0xF807B reads the definition pointer at handle + 8
+# D3DRENDERSTATETYPE: 4531 has 9 fewer simple states (5659's D3DRS_STIPPLEENABLE and eight SIMPLE_UNUSED after
+# D3DRS_DEPTHCLIPCONTROL, 82), 9 fewer deferred ones (DEFERRED_UNUSED8..1 and one of SWAPFILTER/PRESENTATIONINTERVAL)
+# and no D3DRS_SAMPLEALPHA. The runtime keeps 5659's numbering and maps the title's indices through these.
+RenderState_DeferredFirst = 83  # D3DDevice_SetRenderStateNotInline 0xF38C5: state < 0x53 is simple; D3D_InitDefaultState's table 0x101658 gives FOGENABLE..PATCHSEGMENTS defaults at 83..116 (FOGEND, FOGDENSITY 1.0 at 86, 87; POINTSIZE_MAX 64.0 at 114)
+RenderState_ComplexFirst  = 118 # D3DDevice_SetRenderState_PSTextureModes 0xF3860 stores [0x102460 + 118 * 4]; VertexBlend 119, ..., LineWidth 139 follow 5659's order
+RenderState_HasSampleAlpha = 0  # D3DDevice_SetRenderState_LineWidth stores 139 and Dxt1NoiseEnable (0xF3E20) 140: nothing between them
+# DSOUND
+# CDirectSoundStream_Vtable, CDirectSoundStream_Vtable2: not given (DirectSoundCreateStream is linked but the title's one
+# call 0xA0C87 is to the buffer creator 0x10807C; no stream objects found)
+EffectsImage_Skip0    = 0x804   # XAudioDownloadEffectsImage's parser 0x109081 adds this dword count
+EffectsImage_Skip1    = 0x80C   # 0x10907B loads this dword count
+EffectsImage_Desc     = 0x818   # 0x10908A: descriptor at image + 0x818 + (Skip0 + Skip1) * 4
+# XAPI XPP device type record
+XPP_Current           = 0x0     # XGetDeviceChanges 0x124533 reads [esi] (current)
+XPP_Changed           = 0x4     # XGetDeviceChanges 0x124512 tests [esi + 4] (changed)
+XPP_Previous          = 0x8     # XGetDeviceChanges 0x12452B reads [esi + 8] (previous)

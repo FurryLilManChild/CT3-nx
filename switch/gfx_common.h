@@ -454,7 +454,34 @@ constexpr size_t kTsProjection = 3;
 constexpr size_t kTsTexture0 = 16;
 constexpr size_t kTsWorld = 256;
 
+// CT3-nx: the title's own model views (D3DDevice_SetModelView, SetVertexBlendModelView): its matrices go to the
+// console's screen space without the viewport's X and Y; from there to the target's clip space
+void FillModelViewConstants(const State& s, GuestExtent size, DrawConstants& c) {
+    const auto& v = s.viewport;
+    float sm[16] = {2.0f / float(size.w), 0, 0, 0, 0, -2.0f / float(size.h), 0, 0, 0, 0, 1.0f / s.zscale, 0,
+                    2.0f * float(v.x) / float(size.w) - 1, 1 - 2.0f * float(v.y) / float(size.h), 0, 1};
+    const float* wv = s.mv[0].data();
+    float full[16], pvm[16];
+    MatMul(s.mv_screen.data(), sm, pvm);  // composite or projection viewport, to clip space
+    if (s.mv_composite) std::memcpy(full, pvm, sizeof(full));
+    else MatMul(wv, pvm, full);
+    Transpose(full, c.wvp);
+    Transpose(wv, c.wv);
+    float n[16] = {};
+    InverseTranspose3x3(wv, n);
+    Transpose(n, c.wvn);
+    for (int t = 0; t < 4; t++) Transpose(s.transforms[kTsTexture0 + size_t(t)].data(), c.tm[t]);
+    for (size_t k = 1; k < 4; k++) {
+        float nk[16] = {};
+        Transpose(s.mv[k].data(), c.wvb[k - 1]);
+        InverseTranspose3x3(s.mv[k].data(), nk);
+        Transpose(nk, c.wvnb[k - 1]);
+    }
+    Transpose(pvm, c.pv);
+}
+
 void FillTransformConstants(const State& s, GuestExtent size, DrawConstants& c) {
+    if (s.mv_count) return FillModelViewConstants(s, size, c);
     float wv[16], wvp[16];
     MatMul(s.transforms[kTsWorld].data(), s.transforms[kTsView].data(), wv);
     MatMul(wv, s.transforms[kTsProjection].data(), wvp);

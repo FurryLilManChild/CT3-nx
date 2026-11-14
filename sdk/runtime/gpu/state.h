@@ -167,6 +167,7 @@ struct State {
     struct Stream {
         uint32_t vb = 0;  // guest D3DVertexBuffer
         uint32_t stride = 0;
+        uint32_t offset = 0;  // CT3-nx: bytes into the buffer (D3DSTREAM_INPUT, SetVertexShaderInput)
     };
     std::array<Stream, 16> streams{};
     uint32_t index_buffer = 0, index_data = 0, base_vertex = 0;
@@ -186,6 +187,14 @@ struct State {
     uint32_t light_enable = 0;                         // bit per light
     float ss_offset_x = 0, ss_offset_y = 0;
     float zscale = 16777215.0f;  // depth buffer units per 1.0
+    // CT3-nx: model view matrices the title gives itself (XDK D3DDevice_SetModelView, SetVertexBlendModelView), used
+    // instead of world and view while mv_count is not 0. mv_screen is the composite (SetModelView) or the projection
+    // and viewport (SetVertexBlendModelView) as the XDK takes it: to the console's screen space, without the
+    // viewport's X and Y, which the hardware adds.
+    uint32_t mv_count = 0;
+    uint32_t mv_composite = 0;  // 1: mv_screen is model view * projection * viewport (SetModelView)
+    std::array<std::array<float, 16>, 4> mv{};
+    std::array<float, 16> mv_screen{};
 };
 
 // STREET: the 64 byte blocks of State written since the render thread last sent them. With g_track_state on, the

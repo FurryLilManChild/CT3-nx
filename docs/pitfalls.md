@@ -200,3 +200,22 @@ the rule.
     figure, then corrected it to 1.25 to 1.4x; the measured gain on lifted code was about 1.15x (31.8% of main
     thread samples against 36.6%). Rule: before quoting another port's gain, compare its baseline with ours, and
     give the estimate as a range with what it rests on.
+
+## XboxXBE-Recomp move (branch xbe-recomp)
+
+37. **Name an XDK function by what it does, not by what it is called near.** (2026-11-14.) I named 0xFE7D0
+    CDevice_KickOff because BeginPush and a tiny wrapper call it before pushing. XbSymbolDatabase put KickOff at
+    0xF8520 instead, and DrawIndexedVertices passes it the base vertex: 0xFE7D0 is the per-draw state flush (the
+    same role as 5659's 0x334FF0). Had the name stood, the runtime's no-op KickOff HLE would have replaced the flush.
+    Rule: before naming by hand, read the function's arguments at two or more call sites and what it writes, and
+    cross-check against an independent source (a signature database, the same function in another XDK build).
+
+38. **Check a parser of someone else's data format against its definition file first.** (2026-11-14.) My reader of
+    XbSymbolDatabase's signatures took only the `{offset, byte}` pairs and missed the `OV_MATCH(offset, bytes...)`
+    macro, which most of the 4531 signatures use; a signature left with only its few pairs matched the wrong
+    function (0xFE7D0 again). Rule: list every macro the data uses (`grep -o` over the files) and handle each, or
+    reject entries that use one the parser does not know.
+
+39. **No `rm -rf` with a glob after a `cd`.** (2026-11-14.) Clearing the new worktree with `cd dir; rm -rf ./*` was
+    blocked by the safety check, rightly: if the `cd` failed it would have emptied the wrong folder. `git rm -r` in
+    the worktree did the same job safely.

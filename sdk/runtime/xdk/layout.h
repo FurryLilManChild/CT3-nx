@@ -36,6 +36,18 @@ constexpr bool AllKnown(const LayoutKey (&keys)[N]) {
         if constexpr (!::xdk::AllKnown(keys_)) ::xdk::LayoutMissing(lib, keys_, std::size(keys_)); \
     } while (0)
 
+// CT3-nx: D3DRENDERSTATETYPE numbering of the image's library. The runtime keeps 5233/5659/5849's (gpu::kRs*); an older
+// build numbers its deferred and complex states lower (XDK 4531: sdk/xdk/4531/layout.toml) and lacks D3DRS_SAMPLEALPHA.
+#ifndef XDK_RenderState_DeferredFirst
+#define XDK_RenderState_DeferredFirst 92u
+#endif
+#ifndef XDK_RenderState_ComplexFirst
+#define XDK_RenderState_ComplexFirst 136u
+#endif
+#ifndef XDK_RenderState_HasSampleAlpha
+#define XDK_RenderState_HasSampleAlpha 1u
+#endif
+
 #ifndef XDK_CDevice_Push
 #define XDK_CDevice_Push 0xFFFFFFFFu
 #endif
