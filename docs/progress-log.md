@@ -33,5 +33,7 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
   - D3DDevice_SetVertexShaderInput (stream buffers with offsets instead of SetStreamSource): HLE, and a per-stream
     offset in State::Stream.
   - IDirectSoundBuffer_SetConeOrientation, SetConeOutsideVolume, SetMode and SetRolloffFactor (per buffer): HLEs.
-- game.toml: 2,107 seeds (main's function starts the image points to, plus main's 82 hand seeds). xbe_recomp: 6,153
-  functions, 311,116 instructions.
+- game.toml: 2,105 seeds (main's function starts the image points to, plus main's 82 hand seeds). xbe_recomp: 6,151
+  functions, 311,116 instructions. Two candidates dropped after the first Switch compile check stopped at a goto to
+  an undefined label: 0x000DA210 and 0x000DDBEC are jump table data in .text that main's disassembler took for
+  functions.

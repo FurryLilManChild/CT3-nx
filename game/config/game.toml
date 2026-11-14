@@ -16,7 +16,9 @@ code_sections = [".text", "PSGSFD00", "PSGSFD_I", "PSGSFD_B", "PSGSFD_P", "D3D",
 [functions]
 # CT3-nx: function starts the xboxrecomp port (main) found (tools/disasm and func_id, 7,000+, with its
 # config/seed_functions.json) that the image holds as an aligned pointer in .rdata or .data, or loads as an
-# immediate in code, plus all of main's hand seeds (each with its evidence there).
+# immediate in code, plus all of main's hand seeds (each with its evidence there). Dropped: 0x000DA210 and
+# 0x000DDBEC, jump table data in .text that the old disassembler took for functions (they did not decode: the
+# first Switch compile check stopped at a goto to an undefined label).
 0x00011170 = ""
 0x00011254 = ""
 0x00011258 = ""
@@ -1679,13 +1681,11 @@ code_sections = [".text", "PSGSFD00", "PSGSFD_I", "PSGSFD_B", "PSGSFD_P", "D3D",
 0x000D82A8 = ""
 0x000D8D70 = ""
 0x000D97C0 = ""
-0x000DA210 = ""
 0x000DAC74 = ""
 0x000DB6B0 = ""
 0x000DC16C = ""
 0x000DCC14 = ""
 0x000DD4A0 = ""
-0x000DDBEC = ""
 0x000DE17B = ""
 0x000DE29D = ""
 0x000DE31B = ""
