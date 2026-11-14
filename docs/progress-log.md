@@ -37,3 +37,6 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
   functions, 311,116 instructions. Two candidates dropped after the first Switch compile check stopped at a goto to
   an undefined label: 0x000DA210 and 0x000DDBEC are jump table data in .text that main's disassembler took for
   functions.
+- Cloud compile check of the Switch NRO (devkitA64 GCC 16, deko3d and NVK from /opt/nvk-sdk): builds, 308 steps, no
+  errors; the NRO is 28.2 MB. Not sent: the PC boot comes first. (d3d12.cpp, the PC's D3D12 renderer, is not part of
+  the Switch build; Mark's PC build checks it.)
