@@ -1,25 +1,18 @@
-# CT3-nx: notes for Claude
+# sheroes-nx: notes for Claude (branch xbe-recomp)
 
-Native PC and Switch port of Crazy Taxi 3: High Roller (original Xbox, NTSC-U, title 53450004, XDK 4531) via
-xboxrecomp static recompilation (x86 to C). The repo started as a copy of sheroes-nx (FurryLilManChild/sheroes-nx,
-Sonic Heroes, 0.2.0), itself a copy of CoD-nx (FurryLilManChild/cod-nx), both built on antoxa2584x/burnout3-sw (MIT):
-its vendored xboxrecomp (the NFS Switch fork: NV2A Vulkan and OpenGL renderers, Horizon support), `src/main.c`,
-`src/switch_nx.c`, `src/switch_saltynx.c`, `switch/build.sh` and `tools/regen.sh`. Do not copy code from nfsu1-sw or
-nfsu2-sw: they have no license.
+Native PC and Switch port of Sonic Heroes (original Xbox, NTSC-U, title 5345002B, XDK 5659), on this branch rebuilt
+on TGP482's XboxXBE-Recomp (`sdk/`, MIT) by way of xsaja/brextreme-nx (Bloody Roar Extreme, GPL-3), itself built on
+street-nx and mvp-nx, whose Switch layer comes from gerisson1996/BLACK-NX-PORT (no license; Mark: fine to build on).
+The x86 code is translated to C++ (`xbe_recomp`), and Direct3D 8 and DirectSound are replaced at the API level
+(`sdk/runtime/xdk`): no NV2A command stream, a render thread replays recorded draws with deko3d or Vulkan. Why, and
+the measurements behind it: `docs/strategy-review.md`, `docs/feasibility-xbe-recomp.md`. The xboxrecomp version of
+the port (0.2.0) stays on `main`; its notes are in `docs/xboxrecomp-era/` and are the knowledge base for this game
+(the D3D and DSOUND addresses at 5659, the RenderWare fixed-function needs, the disc's file count, CRI middleware).
 
-The big difference from the earlier Xbox ports: Crazy Taxi 3 links XDK 1.0.4531, older than Sonic Heroes (5659) and
-CoD-nx and Burnout 3 (5849). None of their D3D and DirectSound hooks carry over by address; sheroes-nx's set is kept
-for reference in `docs/hooks-from-sheroes-5659.c.txt`, to be found again here. The kernel may need an ordinal remap
-(`xboxrecomp/tools/kernel_audit/gen_ordinal_remap.py`; Halo's 3911 and Crimson Skies' 5659 needed none). The engine
-is Hitmaker's own, not RenderWare, so expect more missed-function seeds than sheroes-nx. CRI middleware is present
-(ADX audio in `Media/ADX`, `adx0.afs`; the PSGSFD sections are probably Sofdec).
+License: GPL-3 (`LICENSE`), with the components listed in `LICENSES.txt`. Code from main (MIT) keeps its notices.
 
-Related ports: CTDC-nx (Crazy Taxi 1 and 2, Dreamcast, dream-recomp) settled the game-side decisions for this series:
-60 fps with every drawn frame shown evenly and no "smooth" frame-skip option, no trigger ramp (a digital trigger is
-full at once), and the smallest overclock step (1224 MHz) tried first.
-
-Reference for the game's behaviour (not code to copy): sdiraimondo/ct3-recomp, a recompilation of the 2004 PC port
-(Win32, D3D9 through dxvk-native; no license chosen), and stashymane's taxipatch and CT3Tweaks (PC patches).
+Upstream docs carried over: `docs/brextreme/` (how its SDK, PGO, the profiler and the XDK 5233 matching work).
+Comments marked `// STREET:` and `// BREXTREME:` say which port made a change; keep them.
 
 ## Who is working on this
 
@@ -29,67 +22,44 @@ click by click, with copy-paste commands. Never use em dashes in anything writte
 decorative emoji.
 
 His hardware: a Windows PC (Lenovo Legion Go), an unpatched V1 Switch on Atmosphere CFW (sys-clk), an Xbox 360 with
-Aurora. His disc image is `C:\CT3-nx\assets\CRAZY TAXI 3 High Roller.iso` (a trimmed XISO:
-the game partition starts at offset 0); the extracted disc is `C:\CT3-nx\assets\game_root`. A cloud session
-reaches both through the device bridge. He moves files to the Switch's SD card himself over USB; he does not want
-Claude to control the Switch's folders. He drops Switch logs in `C:\CT3-nx\out\sd\switch\switchlogs`.
+Aurora. His disc image is `C:\sheroes-nx\assets\Sonic Heroes (USA) (En,Ja,Fr,De,Es,It).xiso.iso` (a trimmed XISO);
+the extracted disc is `C:\sheroes-nx\assets\game_root`. A cloud session reaches both through the device bridge. He
+moves files to the Switch's SD card himself over USB; he does not want Claude to control the Switch's folders. He
+drops Switch logs in `C:\sheroes-nx\out\sd\switch\switchlogs`.
 
-Workflow (Mark's choice, 2026-10-28): as on the Xbox 360 ports. Mark builds on his PC in PowerShell
-(`tools\win\build_pc.ps1`), runs boot tests and play tests, Claude reads `C:\CT3-nx\out\logs` through the
-bridge and pushes fixes. Get the game working on the PC first, then the Switch. Avoid long cloud test runs (the cloud
-Linux build on lavapipe needs about 7 minutes to reach a stage).
-Mark's standing rule (2026-10-28, repeated after a slip): do not start cloud test runs on your own. Build checks
-(tools/linux/wincheck.sh) are fine; anything that runs the game goes to Mark. If the cloud would genuinely be
-more efficient for a step, say so and ask him first.
-Mark's design choices are binding (2026-11-08, after pitfall 35). Performance work follows the Direct3D path he
-chose (docs/d3d-path.md: native replacements for D3D's entry points, the Switch doing the work itself). Every build
-proposal names the plan step it serves. Anything off the plan is raised with him as a proposed change and waits
-for his yes, before any code is written for it.
-Priority (carried over from sheroes-nx): playability first. Get a shift running and playable before cosmetic
-issues.
-Confirm with Mark before starting any build, including quick fix builds. Deliver each Switch test build by
-replacing the NRO in `C:\CT3-nx\out\sd\switch\ct3\` (not a new folder per test), with every file the test
-needs beside it. For A/B diagnostics, make one build cycle through the settings in a single session.
+Workflow: Mark builds on his PC, runs boot tests and play tests, Claude reads the logs through the bridge and pushes
+fixes. PC first, then the Switch. Do not start cloud test runs that run the game on your own; build checks are fine.
+Present findings and the next build's plan, and wait for his go-ahead before each test build. Goal: 60 fps at stock
+clocks (Mark, 2026-11-09).
 
 Git: commit as `FurryLilManChild <346934328+FurryLilManChild@users.noreply.github.com>`. History rewrites and force
 pushes need his explicit consent.
 
 ## Hard rules
 
-- Never commit game data or anything derived from it: the disc image, `default.xbe`, `assets/`, the generated C
-  (`out/gen/`), `*_analysis.json`, the toolkit's `xboxrecomp/tools/*/output/`, frame dumps, shader caches,
-  `switch_sd/`. `.gitignore` covers these; check `git status` before every commit.
-- Every hand-written override in `src/recomp_manual.c` and every seed in `config/seed_functions.json` carries its
-  evidence (which run or tool found it, callers, addresses).
+- Never commit game data or anything derived from it: the disc, `default.xbe`, `assets/`, `game/assets/`,
+  `game/generated/`, `out/`, frame dumps, shader caches, `switch_sd/`. Check `git status` before every commit.
+- Every hand-named XDK function in `game/config/game.toml` and every value in `sdk/xdk/5659/layout.toml` carries its
+  evidence (the 5659 address and instruction that proves it).
 - Log each session in `docs/progress-log.md` (newest first).
-- Add every mistake or wrong conclusion to `docs/pitfalls.md` as it happens (Mark, 2026-11-05); review it with
-  him when wrapping up, then fold it into the port skills.
 
 ## Layout
 
 | Where | What |
 |---|---|
-| `xboxrecomp/` | vendored toolkit (burnout3-sw's copy via CoD-nx, MIT); its tools write to `xboxrecomp/tools/*/output/` (ignored) |
-| `src/main.c` | boot: memory layout, kernel, APU, USB, renderer, entry point |
-| `src/recomp_manual.c` | hand-written overrides (`recomp_lookup_manual`) |
-| `src/ct3_menu.c` | the port menu (+ and -) and `ct3_options.txt` |
-| `src/switch_nx.c` | Horizon: log, `ct3_env.txt`, loading screen, profiler, clocks |
-| `config/seed_functions.json` | entry points the static pass misses |
-| `tools/regen.sh` | XBE to C: disasm, func_id, abi_analysis, recomp (into `out/gen/`) |
-| `switch/build.sh` | the Switch NRO (Vulkan with NVK by default; `VULKAN=0` for OpenGL) |
-| `tools/win/*.ps1` | the Windows PC build on Mark's PC (same Vulkan renderer as the Switch): `build_pc.ps1`, `boot_test.ps1`, `play.ps1`; logs in `out\logs\` (docs/windows-build.md) |
-| `tools/linux/setup_switch_wine.sh` | devkitPro's Windows install under Wine on a cloud machine |
-| `assets/game_root/` | the extracted disc (ignored) |
+| `sdk/` | XboxXBE-Recomp: `tools/recomp` (xbe_recomp), `tools/symbols` (xbe_symbols), `runtime/` (kernel, D3D8, DSound, render thread), `xdk/<build>/` (signatures and layouts) |
+| `game/config/game.toml` | the recompiler's input for Sonic Heroes: sections, hand-named functions, `[symbols]` |
+| `game/src/` | game hooks (`X86_FUNC(sub_...)` replaces a recompiled function) and `game_info.cpp` |
+| `pc/` | the Windows host (D3D12 and Vulkan exes) |
+| `switch/` | the Switch host (deko3d and Vulkan renderers, audio, input, profiler, PGO) |
+| `tools/build_pc.cmd` | the Windows build: tools, game.toml, recompile into game/generated, PC exes |
+| `switch/build.sh` | the Switch NRO |
 
 ## The game
 
-- Disc: `C:\CT3-nx\assets\CRAZY TAXI 3 High Roller.iso`, a trimmed XISO (XDVDFS descriptor at 0x10000), so it
-  cannot be checked against Redump. Disc SHA-1 82803ecd7ab0412ea6bc4d9402a8d39e5499c407 (4,699,979,776 bytes).
-  401 files, 394 MB, extracted to `assets/game_root` (`default.xbe` and `Media/`).
-- `default.xbe`: title "CRAZY TAXI 3 High Roller", 53450004, region 1 (North America), version 1. Base 0x00010000,
-  entry 0x000E0C34, kernel thunks 0x0012A560, image end 0x0035BAC0. Sections .text (0x11000, 0xDE780 bytes),
-  PSGSFD00, PSGSFD_I, PSGSFD_B, PSGSFD_P, D3D (0xF3800), XGRPH, DSOUND (0x1059E0), XPP, .rdata, .data (0x1BB980,
-  0x1967BC), DOLBY, $$XTIMAGE. Libraries XAPILIB, D3D8, XGRAPHC, DSOUND, XBOXKRNL, LIBCMT, all 1.0.4531.
-  SHA-256 eceb4aa071ce9b883566decd70c9ff3c3853003a0bbb4099972232c4edbdb87c.
-- Switch paths: `sdmc:/switch/ct3/` (the NRO, `ct3_env.txt`, `ct3_log.txt`), the extracted disc in
-  `sdmc:/switch/ct3/game/`.
+- `default.xbe`: base 0x00010000, entry 0x0027972B. Sections .text (0x11000), D3D (0x32AEA0-0x33E428), DSOUND
+  (0x33E440-0x35AA54), PSFD00/_I/_B/_P (CRI Sofdec), DOLPHIN, D3DX, XGRPH, XPP, .rdata, .data, DOLBY. Libraries
+  XAPILIB, D3D8, DSOUND, XBOXKRNL, LIBCMT, D3DX8, XGRAPHC, all 1.0.5659. SHA-256
+  5a9637976b147d22d2ea845c178379f97a3df9040ee41efe670a37298129c5c6.
+- Switch paths: `sdmc:/switch/sheroes/` (the NRO, `sheroes-settings.toml`, `logs/`), the extracted disc in
+  `sdmc:/switch/sheroes/game/` (the same game folder as the 0.x releases).
