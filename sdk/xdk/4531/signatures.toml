@@ -238,7 +238,7 @@ XNetGetTitleXnAddr = {}
 XNetInAddrToXnAddr = {}
 XNetRandom = {}
 XNetRegisterKey = {}
-XNetStartup = {sec = ".text", len = 0xE, hash = "0x972EB562F739465D", calls = [[0x52, "0x856A24D556B472D1", [[0x2E, "0x944212381B011254"]]]], ret = 4, regs = []}
+XNetStartup = {}
 XNetUnregisterKey = {}
 XNetXnAddrToInAddr = {}
 XOnlineCleanup = {}

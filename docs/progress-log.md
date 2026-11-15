@@ -2,6 +2,26 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (late night): second Switch run
+
+- The static vertex cache worked: the title thread's recording fell from about 6 ms to about 3 ms a frame. But the
+  shift still ran 31 to 38 fps, render thread 25 to 28 ms, about 3 MB a frame still uploaded (constants and indices).
+- The profile (prof.bin) shows why the render thread is slow: two guest threads each burned a whole core for the
+  whole run, leaving the render and title threads one and a bit of the Switch's three cores.
+  - guest_24, the game's sound command thread (0xA1400), calls Sleep(20) each pass (0xA16E3: push 0x14, call
+    0x0E0BB7). 0x0E0BB7 is Sleep (push 0, push ms, call SleepEx 0x0E0B53), but a weak 3911 signature from
+    XbSymbolDatabase (8 pairs, no xrefs) named it XNetStartup, so the runtime's XNetStartup HLE returned at once and
+    the 20 ms sleeps vanished. game.toml now sets XNetStartup = 0 (gen_gametoml.py force_zero); signatures.toml
+    re-signed (140 functions). A check of every other weak match (12 or fewer pairs, no xrefs) still named: 29 are
+    inside the D3D, DSOUND and XPP sections (library code only, and the PC run draws and sounds right); the one in
+    game code, XLaunchNewImageA, has no HLE, so its original runs either way.
+  - guest_28 spins in CRI's idle loop 0x000B33D0 (counts free CPU until a flag is set). On the Xbox it only ran
+    when nothing else wanted the CPU. Hook in game/src/game/hooks.cpp: the same loop with a 1 ms sleep each pass.
+  - Render thread by function: waiting 24%, DekoBackend::Draw 11%, memmove 6% (constants), gpu::Hash 5% (most of it
+    from Draw), FillTransformConstants 5%, Describe 3%, Assemble 2.5%. Per-draw costs are the next target once the
+    cores are free.
+- Next build (Switch speed): the two fixes above, nothing else, so the run shows what freeing the cores gives.
+
 ## 2026-11-14 (night): first Switch run
 
 - Into a shift with the ISO in the game folder. Stock clocks (CPU 1020 MHz): menus 51 to 54 fps, the shift 29.7 to

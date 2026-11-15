@@ -236,3 +236,10 @@ the rule.
     and steered him to the extracted disc; his card takes files over 4 GB. On this runtime the disc image is the
     faster setup on the Switch (one host file, no per-file opens: Sonic Heroes' fix). Rule: recommend the disc image
     first; mention the 4 GB limit only as a fallback for a FAT32 card.
+
+43. **A weak database signature can name the wrong function.** (2026-11-14.) XbSymbolDatabase's 3911 XNetStartup
+    signature is 8 byte pairs with no xrefs. It matched CT3's Sleep (0x0E0BB7), whose few bytes look alike, and the
+    runtime's XNetStartup HLE replaced every Sleep with an instant return: a sound thread spun a whole Switch core and
+    the PC hid it (more cores). Rule: treat any matched signature with 12 or fewer pairs and no xrefs as unproven;
+    check its callers and disassembly before keeping the name, and on the first Switch profile look for guest threads
+    that never sleep.
