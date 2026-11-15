@@ -243,3 +243,8 @@ the rule.
     the PC hid it (more cores). Rule: treat any matched signature with 12 or fewer pairs and no xrefs as unproven;
     check its callers and disassembly before keeping the name, and on the first Switch profile look for guest threads
     that never sleep.
+
+44. **Read the runtime's waits before blaming the renderer.** (2026-11-15.) Two Switch rounds went to the render
+    thread while the title thread was also sleeping a flat 16 ms a frame in an upstream BlockUntilVerticalBlank HLE
+    (fine for games that never call it). The first profile already showed the title thread asleep in it. Rule: on
+    every profile, list where the title thread sleeps and check each wait's HLE against what the console does.

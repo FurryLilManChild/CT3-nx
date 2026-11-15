@@ -2,6 +2,19 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15: third Switch run
+
+- The two spinning threads are gone (no busy samples outside the title and render threads). The shift still ran
+  31 to 42 fps, but the render thread fell from 25 to 28 ms to 14 to 21 ms a frame at 900 to 1,430 draws (GPU 8.5 to
+  9.6 ms, recording 2.3 to 3.5 ms). Menus 53 to 58 fps.
+- The title thread now sets the pace: 57% of its time asleep in BlockUntilVerticalBlank (0x0F5250). The game ends
+  every frame with Swap then BlockUntilVerticalBlank (0x0A7357, 0x0A735C), and the runtime's HLE slept a flat 16 ms:
+  about 12 ms of work plus 16 ms made 28 ms frames, about 35 fps. The same code runs on the PC, which likely explains
+  its 45 to 49 fps there. Fixed: wait for the vertical blank thread's next tick (the console's behaviour), or the
+  next 16.667 ms step of the steady clock.
+- Next build (Switch speed): that fix alone. Then the render thread (14 to 21 ms) is the limit: constants 2.7 to 4.3
+  ms (reused only 60%), textures 2.8 to 3.9 ms, upload 1.9 to 3.1 ms (2 to 3.4 MB a frame), assemble 1 to 1.7 ms.
+
 ## 2026-11-14 (late night): second Switch run
 
 - The static vertex cache worked: the title thread's recording fell from about 6 ms to about 3 ms a frame. But the

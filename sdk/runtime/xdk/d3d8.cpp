@@ -340,6 +340,9 @@ void ApplyDefaultStates(X86Context& ctx) {
 constexpr bool kVBlank = XDK_CDevice_VBlankCount != xdk::kUnknown && XDK_CDevice_VBlankEvent != xdk::kUnknown &&
                          XDK_CDevice_VBlankCallback != xdk::kUnknown;
 
+// CT3-nx: the time of the next blank (steady clock, ns), 0 until the thread runs: BlockUntilVerticalBlank waits for it
+std::atomic<int64_t> g_next_blank{0};
+
 // what the library's vertical blank interrupt leaves for the title: count, event, callback
 void VerticalBlank(X86Context& ctx) {
     using clock = std::chrono::steady_clock;
@@ -347,6 +350,8 @@ void VerticalBlank(X86Context& ctx) {
     auto next = clock::now();
     for (;;) {
         next = std::max(next + std::chrono::microseconds(16667), clock::now());
+        g_next_blank.store(std::chrono::duration_cast<std::chrono::nanoseconds>(next.time_since_epoch()).count(),
+                           std::memory_order_release);
         std::this_thread::sleep_until(next);
         uint32_t count = Dev(XDK_CDevice_VBlankCount) + 1, swaps = Dev(kDevSwapCount);
         SetDev(XDK_CDevice_VBlankCount, count);
@@ -561,8 +566,19 @@ HLE_STDCALL(D3D_MakeRequestedSpace, 2) {
     return ScratchPush();
 }
 
+// CT3-nx: waits for the next blank, as the console does, not a flat 16 ms. Crazy Taxi 3 ends every frame with
+// Swap then BlockUntilVerticalBlank (0x0A7357, 0x0A735C): 12 ms of work plus 16 ms of sleep made 28 ms frames, about
+// 35 fps on the Switch and the PC alike (second and third Switch profiles, 2026-11-15: the title thread asleep here
+// 57% of the time). Waits for the blank thread's next tick when it runs, otherwise the next 16.667 ms step of the
+// steady clock.
 HLE_STDCALL(D3DDevice_BlockUntilVerticalBlank, 0) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    using clock = std::chrono::steady_clock;
+    using ns = std::chrono::nanoseconds;
+    constexpr int64_t kPeriod = 16666667;
+    int64_t now = std::chrono::duration_cast<ns>(clock::now().time_since_epoch()).count();
+    int64_t next = g_next_blank.load(std::memory_order_acquire);
+    if (next <= now || next > now + 2 * kPeriod) next = (now / kPeriod + 1) * kPeriod;  // no blank thread, or late
+    std::this_thread::sleep_until(clock::time_point(ns(next + 200000)));  // just past it: the count and event are set
     return 0;
 }
 HLE_STDCALL(D3DDevice_SetFlickerFilter, 1) { return 0; }
