@@ -426,8 +426,19 @@ void SurfaceSize(const Surface& s, uint32_t& w, uint32_t& h) {
     }
 }
 
+std::atomic<uint64_t> g_dirty_marks{0}, g_dirty_buffers{0};
+
 void MarkDirty(uint32_t res) {
     if (!res) return;
+    // CT3-nx: only textures, surfaces and palettes. The dirty epochs are read for textures and render targets alone
+    // (texture checks, LatchCpuWrite), but every lock of a vertex or index buffer (D3DCOMMON_TYPE 0, 1, 2 for a push
+    // buffer) moved g_epoch, and a new g_epoch makes every remembered texture stage look again (deko.cpp
+    // BindStageTextures: 60% remembered in Crazy Taxi 3's city, fourth Switch run, 2026-11-15).
+    if ((kernel::R32(res) & 0x70000u) < 0x30000u) {
+        g_dirty_buffers.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    g_dirty_marks.fetch_add(1, std::memory_order_relaxed);
     uint32_t data = mem::VirtualFromPhysical(kernel::R32(res + 4));
     std::lock_guard<std::mutex> lock(g_dirty_lock);
     g_dirty[data] = ++g_epoch;

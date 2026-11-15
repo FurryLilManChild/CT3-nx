@@ -575,7 +575,9 @@ private:
         bool points = false, fixed = false;
         bool operator==(const DcKey&) const = default;
     } last_dc_key_;
-    Upload ConstantsReused(LastConstants& last, const void* data, size_t bytes, uint64_t state_gen = 0);
+    Upload ConstantsReused(LastConstants& last, const void* data, size_t bytes, uint64_t state_gen = 0,
+                           size_t probe = 0, size_t probe_bytes = 0);
+    bool ring_cached_ = true;  // CT3-nx: the upload ring is CPU cached, so the last constants can be read back from it
 
     // command recording
     void BeginWork();
@@ -769,6 +771,7 @@ bool DekoBackend::Init(uint32_t width, uint32_t height) {
     config.slots = kSlots;
     config.upload_mb = kUploadMb;
     config.upload_cached = host::DekoCachedUpload();
+    ring_cached_ = config.upload_cached;
     check_frames_ = host::TextureCheckFrames();
     config.command_kb = 2048;
     core_.Create(device_, config);
@@ -989,7 +992,8 @@ Upload DekoBackend::Constants(const void* data, size_t bytes) {
     return u;
 }
 
-Upload DekoBackend::ConstantsReused(LastConstants& last, const void* data, size_t bytes, uint64_t state_gen) {
+Upload DekoBackend::ConstantsReused(LastConstants& last, const void* data, size_t bytes, uint64_t state_gen, size_t probe,
+                                     size_t probe_bytes) {
     // BREXTREME: constants no state change touched since they were uploaded are those bytes, without a compare
     if (gpu::g_reuse_constants.load(std::memory_order_relaxed) && last.gen == upload_gen_ && last.bytes == bytes &&
         state_gen && last.state_gen == state_gen) {
@@ -998,10 +1002,19 @@ Upload DekoBackend::ConstantsReused(LastConstants& last, const void* data, size_
     }
     // BREXTREME: with a generation a new one means a state change wrote different bytes (the title thread sends only
     // what differs), so they are uploaded without a compare and without keeping a copy to compare with
-    if (gpu::g_reuse_constants.load(std::memory_order_relaxed) && last.gen == upload_gen_ && last.bytes == bytes &&
-        !state_gen && last.data.size() == bytes && !std::memcmp(last.data.data(), data, bytes)) {
-        const_reused_++;
-        return last.at;
+    // CT3-nx: compared with the copy the last upload left in the ring (CPU cached), not a second copy kept for it, and
+    // the bytes most likely to differ (probe: the transform, for draw constants) first. Crazy Taxi 3 sets a new model
+    // view for most of its 1,100 to 1,400 draws a frame, so the compare mostly fails and keeping the copy cost a 2 KB
+    // memmove a draw (fourth Switch profile, 2026-11-15: 7.5% of the render thread here).
+    if (!state_gen && gpu::g_reuse_constants.load(std::memory_order_relaxed) && last.gen == upload_gen_ &&
+        last.bytes == bytes) {
+        const uint8_t* prev = ring_cached_ ? last.at.cpu : last.data.data();
+        const uint8_t* now = static_cast<const uint8_t*>(data);
+        if (prev && (ring_cached_ || last.data.size() == bytes) &&
+            (!probe_bytes || !std::memcmp(prev + probe, now + probe, probe_bytes)) && !std::memcmp(prev, now, bytes)) {
+            const_reused_++;
+            return last.at;
+        }
     }
     Upload u = Constants(data, bytes);
     const_uploaded_++;
@@ -1010,7 +1023,7 @@ Upload DekoBackend::ConstantsReused(LastConstants& last, const void* data, size_
     last.state_gen = state_gen;
     last.bytes = bytes;
     last.at = u;
-    if (state_gen) last.data.clear();
+    if (state_gen || ring_cached_) last.data.clear();
     else last.data.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + bytes);
     return u;
 }
@@ -1943,7 +1956,7 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
         FillCombinerConstants(s, c);
         FillTextureConstants(s, stages, c);
         if (sh.fixed_transform) {
-            FillTransformConstants(s, size, c);
+            FillTransformConstants(s, size, c, &sh.fk);
             FillLightConstants(s, sh.fk, c);
         }
     }
@@ -1955,7 +1968,8 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
         const_reused_++;
         dc = last_dc_.at;
     } else {
-        dc = ConstantsReused(last_dc_, &c, cbytes);
+        dc = sh.fixed_transform ? ConstantsReused(last_dc_, &c, cbytes, 0, offsetof(DrawConstants, wvp), sizeof(c.wvp))
+                                : ConstantsReused(last_dc_, &c, cbytes);
         last_dc_key_ = dkey;
     }
     DkGpuAddr vbuf[16];
@@ -2671,6 +2685,8 @@ void DekoBackend::LogPerf() {
          double(sig_bytes_) / 1024 / n, double(tex_uploads_) / n, double(tex_upload_bytes_) / 1024 / n,
          double(gpu::g_perf_copied_bytes.exchange(0)) / 1024 / n);
     sig_bytes_ = tex_uploads_ = tex_upload_bytes_ = 0;
+    LOGR("perf: locks a frame: %.1f of textures and surfaces (marked dirty), %.1f of buffers (not marked)",
+         double(gpu::g_dirty_marks.exchange(0)) / n, double(gpu::g_dirty_buffers.exchange(0)) / n);
     static_vertices_.Report(n);  // CT3-nx
     barriers_full_ = barriers_frag_ = 0;
     auto per = [&](std::atomic<uint64_t>& a) { return double(a.exchange(0)) / n; };

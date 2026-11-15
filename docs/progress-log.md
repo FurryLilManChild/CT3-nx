@@ -2,6 +2,22 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15: fourth Switch run
+
+- Mark: "definite improvement". The vertical blank fix took the shift from 31 to 42 fps to 47 to 58 fps (10 s
+  windows: 52.1, 42.9, 57.6, 58.0, 57.2, 49.0, 48.0, 49.6, 47.3), menus 55 to 60. The title thread now sleeps 25% of
+  the time; the render thread is the limit: 12 to 21 ms a frame at 680 to 1,280 draws (GPU 8.4 to 9.6 ms).
+- Hitches of 200 to 400 ms every 10 to 20 s: first-time shaders (1 or 2 compiled in those windows, 124 to 250 ms
+  each). They should fade as the shader cache on the card fills.
+- Render thread by source line (new scratch tool prof_incl.py: each sample charged to the line of Draw it was under):
+  Draw is 84% of the thread; texture binding 14.6% (Hash 4.7%), transform constants 10.9%, the draw constant compare
+  7.5% (memmove 4.6%), Assemble 6.5%, BindState 5.7%, samplers 3.5%, static vertices 2.8%.
+- Next build (Switch speed, render thread): transform constants build only what the draw's shader reads (normal
+  matrices when lit or texgen from normals, blend matrices when blending, texture transforms per stage); draw
+  constants compared with the copy already in the upload ring (CPU cached) instead of a second copy, the transform
+  first; locks of vertex and index buffers no longer move the texture dirty epoch (which made every remembered
+  texture stage look again; 60% remembered), with a new perf line counting locks of each kind.
+
 ## 2026-11-15: third Switch run
 
 - The two spinning threads are gone (no busy samples outside the title and render threads). The shift still ran

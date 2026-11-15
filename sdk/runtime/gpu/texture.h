@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -50,6 +51,8 @@ bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, u
 
 // the title locked a resource, the next bind re-uploads it
 void MarkDirty(uint32_t resource);
+// CT3-nx: locks counted for the perf line: of textures, surfaces and palettes, and of buffers (not marked)
+extern std::atomic<uint64_t> g_dirty_marks, g_dirty_buffers;
 uint64_t DirtyEpoch(uint32_t data_va);
 // the newest lock of any resource: unchanged since a check, no DirtyEpoch (and its lock) is needed
 uint64_t DirtyEpochNow();
