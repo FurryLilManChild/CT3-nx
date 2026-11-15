@@ -110,5 +110,14 @@ struct DrawConstants {
 inline size_t DrawConstantBytes(bool fixed_transform) {
     return fixed_transform ? sizeof(DrawConstants) : offsetof(DrawConstants, wv);
 }
+// CT3-nx: and of the fixed function fields, only what the draw's shader reads: an unlit draw that does not blend reads
+// nothing from mat on (lighting, then blending), so it sends 1,088 of 2,528 bytes. The order is left as it was, so
+// the shaders (and every cached one on the card) stay the same. Crazy Taxi 3 draws 1,100 to 1,460 times a frame, and
+// its render thread spent 2.3 to 2.7 ms a frame on constants and 1.9 to 2.1 ms on uploads (up to 2.9 MB a frame;
+// seventh Switch run, 2026-11-15).
+inline size_t DrawConstantBytes(bool fixed_transform, bool lit, bool blend) {
+    if (!fixed_transform) return offsetof(DrawConstants, wv);
+    return lit || blend ? sizeof(DrawConstants) : offsetof(DrawConstants, mat);
+}
 
 }  // namespace gpu

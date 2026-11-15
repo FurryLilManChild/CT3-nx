@@ -746,6 +746,7 @@ private:
                  kPhTargets, kPhTextures, kPhConstants, kPhases };
     uint64_t phase_ns_[kPhases] = {};
     uint64_t const_reused_ = 0, const_uploaded_ = 0, upload_bytes_ = 0;
+    uint64_t draw_kind_[4] = {};  // CT3-nx: vertex program, fixed unlit, fixed lit, fixed blended (unlit)
     uint64_t stage_memo_hits_ = 0, stage_memo_misses_ = 0;
     uint64_t sig_bytes_ = 0, tex_uploads_ = 0, tex_upload_bytes_ = 0;
     uint32_t check_frames_ = 1;
@@ -1187,6 +1188,10 @@ const DkShader* DekoBackend::LoadDksh(uint64_t hash, const std::vector<uint32_t>
         dksh = compiler_.Compile(stage == vkshader::Stage::Vertex, std::move(g.text), name);
         compiles_++;
         compile_ns_ += TickNs() - t0;
+        // CT3-nx: each new shader by name: the card's cache should make these rarer each run, but about 50 a run kept
+        // coming (seventh Switch run), so the names show whether the same ones come back
+        LOGR("deko3d: new %s shader %s (%.0f ms)", stage == vkshader::Stage::Vertex ? "vertex" : "pixel", name,
+             (TickNs() - t0) / 1e6);
         if (dksh.empty()) return nullptr;
         std::ofstream o(path, std::ios::binary);
         o.write(reinterpret_cast<const char*>(dksh.data()), std::streamsize(dksh.size()));
@@ -1951,7 +1956,8 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
     GuestExtent size;
     SurfaceSize(draw_rt_ ? s.rt : s.zs, size.w, size.h);
     DrawConstants c;
-    const size_t cbytes = gpu::DrawConstantBytes(sh.fixed_transform);
+    const size_t cbytes = gpu::DrawConstantBytes(sh.fixed_transform, (sh.fk.light & 1) != 0, sh.fk.blend != 0);
+    draw_kind_[!sh.fixed_transform ? 0 : (sh.fk.light & 1) ? 2 : sh.fk.blend ? 3 : 1]++;
     if (!dc_same) {
         std::memset(&c, 0, cbytes);
         FillSurfaceConstants(s, size, c);
@@ -2688,6 +2694,9 @@ void DekoBackend::LogPerf() {
          stage_memo_hits_ + stage_memo_misses_ ? 100.0 * double(stage_memo_hits_) / double(stage_memo_hits_ + stage_memo_misses_) : 0.0,
          core_.config().upload_cached ? "cached" : "uncached");
     stage_memo_hits_ = stage_memo_misses_ = 0;
+    LOGR("perf: draws a frame by kind: %.0f vertex program, %.0f fixed unlit, %.0f fixed lit, %.0f fixed blended",
+         double(draw_kind_[0]) / n, double(draw_kind_[1]) / n, double(draw_kind_[2]) / n, double(draw_kind_[3]) / n);
+    std::memset(draw_kind_, 0, sizeof(draw_kind_));
     LOGR("perf: textures a frame: %.0f KB checked, %.1f uploaded (%.0f KB); vertices copied by the title thread %.0f KB",
          double(sig_bytes_) / 1024 / n, double(tex_uploads_) / n, double(tex_upload_bytes_) / 1024 / n,
          double(gpu::g_perf_copied_bytes.exchange(0)) / 1024 / n);

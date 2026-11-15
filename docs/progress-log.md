@@ -2,6 +2,20 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15 (evening): seventh Switch run
+
+- Sound fine as far as Mark could tell (low volume). Threads placed as planned (title core 0, render core 1).
+- At stock clocks the busiest stretches still dip: 49.9 fps at 1,463 draws (render thread 16.5 ms), 58.3 at 1,264
+  (14.4 ms). Per draw 11.2 to 11.4 us against 11.7 to 12.1 in the same kind of scene in run 6: the core layout and
+  the texture signatures gave about 5%, not the jump hoped for.
+- Mark turned CPU boost on from 112 s to 156 s: 1785 MHz, render thread 7.5 to 8.8 ms at 950 to 1,090 draws, 58 to
+  60 fps (60.0 in one 10 s window, the misses being shader compiles).
+- Shader compiles: 23 (1.9 s) at the start of the shift and about 50 in the run, though the card's cache keeps
+  them (174 SPIR-V modules at start, 145 in run 3). Not explained yet: the next build logs each new shader by name.
+- Next build (Switch speed): an unlit draw that does not blend sends 1,088 of the 2,528 bytes of draw constants
+  (DrawConstantBytes; the shader layout is unchanged, so the card's cache still holds); a perf line counts draws by
+  kind (vertex program, unlit, lit, blended); new shaders logged by name.
+
 ## 2026-11-15: sixth Switch run, and a look at the other Xbox ports
 
 - Mark: still slowdowns into the 40s. The shift: 47.4 to 59.6 fps; texture stages remembered 68 to 91% (was 61 to
