@@ -2,6 +2,16 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (night): third PC boot
+
+- Reached the game, but no 3D at all: in the menus and character select the characters never appear, and in a
+  shift only the HUD timer draws. The perf lines show 17 to 19 draws a frame in a shift.
+- Cause (likely, from the code): the models are not drawn through D3D draw calls. The title copies each model's own
+  push data between BeginPush and EndPush (0xA4790, from 0xA4885 and four more; character code 0xA8A00, 0xA8B60,
+  0xA8CD0, 0xA8E70) inside a begin/end pair. The runtime's EndPush drew only inline vertices (0x1818); indices into
+  the vertex buffers (ARRAY_ELEMENT16/32, 0x1800/0x1808) and vertex ranges (DRAW_ARRAYS 0x1810) were taken as
+  render states. EndPush now draws all four kinds, and reports what the first 12 blocks hold (kPushReport, on).
+
 ## 2026-11-14 (evening): second PC boot
 
 - Saves work: U: and T: are mapped (`files: link \??\U: -> ...\UDATA\53450004`), and the game wrote its title

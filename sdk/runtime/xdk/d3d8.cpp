@@ -1744,36 +1744,80 @@ HLE_STDCALL(D3DDevice_BeginPush, 1) {
     return g_push_begin;
 }
 
+// CT3-nx: Crazy Taxi 3 draws its models from push data it copies between BeginPush and EndPush (the title's 0xA4790
+// and 0xA8A00..0xA8E70): a begin/end pair around the model file's own commands, which may be inline vertices
+// (INLINE_ARRAY 0x1818), indices into the vertex buffers bound by SetVertexShaderInput (ARRAY_ELEMENT16 0x1800,
+// ARRAY_ELEMENT32 0x1808) or vertex ranges (DRAW_ARRAYS 0x1810). The runtime drew only the first kind.
+constexpr bool kPushReport = true;  // what the first blocks hold, in the release log; off before measuring
 HLE_STDCALL(D3DDevice_EndPush, 1) {
     std::lock_guard<HleLock> lock(g_lock);
-    constexpr uint32_t kBeginEnd = 0x17FC, kInlineArray = 0x1818;
+    constexpr uint32_t kBeginEnd = 0x17FC, kInlineArray = 0x1818, kElement16 = 0x1800, kElement32 = 0x1808,
+                       kDrawArrays = 0x1810;
     static std::vector<uint32_t> vertices;
-    uint32_t prim = 0;
+    static std::vector<uint16_t> indices;
+    static std::atomic<int> reports{0};
+    const bool report = kPushReport && reports.load(std::memory_order_relaxed) < 12;
+    uint32_t prim = 0, n_inline = 0, n_el16 = 0, n_el32 = 0, n_arrays = 0, n_other = 0, n_draws = 0, big = 0;
+    uint32_t first_head = g_push_begin ? R32(g_push_begin) : 0, bytes_total = g_push_begin ? a[0] - g_push_begin : 0;
     for (uint32_t p = g_push_begin, end = a[0]; g_push_begin && p + 4 <= end;) {
         // count in bits 18 to 28, bit 30 keeps the method for every value
         uint32_t head = R32(p), method = head & 0x1FFC, n = (head >> 18) & 0x7FF;
         p += 4;
         if ((head & 0xA0030003) || n * 4 > end - p) {  // anything but a method header
-            LOG_FIRST(8, "d3d: EndPush stops at command %08X, %u bytes before the end", head, end - p);
+            if (kPushReport) LOGR("d3d: EndPush stops at command %08X, %u bytes before the end", head, end - p);
+            else LOG_FIRST(8, "d3d: EndPush stops at command %08X, %u bytes before the end", head, end - p);
             break;
         }
         for (uint32_t i = 0; i < n; i++, p += 4) {
             uint32_t m = head & 0x40000000 ? method : method + i * 4, v = R32(p);
             ApplyVisibilityMethod(m, v);
             if (m == kInlineArray) {
+                n_inline++;
                 if (prim) vertices.push_back(v);
+            } else if (m == kElement16) {
+                n_el16++;
+                if (prim) indices.push_back(uint16_t(v)), indices.push_back(uint16_t(v >> 16));
+            } else if (m == kElement32) {
+                n_el32++;
+                if (v > 0xFFFF) big++;
+                if (prim) indices.push_back(uint16_t(v));
+            } else if (m == kDrawArrays) {
+                n_arrays++;
+                uint32_t first = v & 0xFFFFFF, count = (v >> 24) + 1;
+                if (first + count > 0x10000) big++;
+                if (prim)
+                    for (uint32_t k = 0; k < count; k++) indices.push_back(uint16_t(first + k));
             } else if (m != kBeginEnd) {
+                n_other++;
                 if (m >> 2 < g_state.simple.size()) gpu::TouchSimple(g_state, m >> 2), g_state.simple[m >> 2] = v;
             } else if (v) {
                 prim = v;
                 vertices.clear();
+                indices.clear();
             } else if (prim) {
-                uint32_t stride = VertexBytes(), bytes = uint32_t(vertices.size()) * 4;
-                if (stride && bytes % stride == 0) DrawUp(prim, bytes / stride, vertices.data(), stride);
-                else LOG_FIRST(8, "d3d: EndPush primitive %u dropped, %u bytes of vertices of %u", prim, bytes, stride);
+                if (!vertices.empty()) {
+                    uint32_t stride = VertexBytes(), bytes = uint32_t(vertices.size()) * 4;
+                    if (stride && bytes % stride == 0) DrawUp(prim, bytes / stride, vertices.data(), stride), n_draws++;
+                    else if (kPushReport) LOGR("d3d: EndPush primitive %u dropped, %u bytes of vertices of %u", prim, bytes, stride);
+                    else LOG_FIRST(8, "d3d: EndPush primitive %u dropped, %u bytes of vertices of %u", prim, bytes, stride);
+                } else if (!indices.empty()) {
+                    SyncDeferred();
+                    if (g_backend)
+                        g_backend->Draw(g_state, prim, 0, uint32_t(indices.size()),
+                                        reinterpret_cast<const uint8_t*>(indices.data()));
+                    n_draws++;
+                }
                 prim = 0;
             }
         }
+    }
+    if (report) {
+        reports.fetch_add(1, std::memory_order_relaxed);
+        LOGR("d3d: EndPush %u bytes, first %08X: inline %u, element16 %u, element32 %u, draw arrays %u, other %u; "
+             "%u draws%s (vertex shader %08X, streams %08X/%u+%u)",
+             bytes_total, first_head, n_inline, n_el16, n_el32, n_arrays, n_other, n_draws,
+             big ? ", indices past 65535" : "", g_state.vs_handle, g_state.streams[0].vb, g_state.streams[0].stride,
+             g_state.streams[0].offset);
     }
     g_push_begin = 0;
     ScratchPush();
