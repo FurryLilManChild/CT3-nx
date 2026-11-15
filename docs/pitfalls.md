@@ -231,3 +231,8 @@ the rule.
     that kept CT3's city from loading was found and fixed on main on 2026-11-05 (play test 11); on the new runtime
     it cost a test round to find again. Rule: before the first boot on a new runtime, list every runtime-level fix
     in the old port's progress log (files, threads, timing, middleware) and check each one against the new runtime.
+
+42. **Don't assume the SD card is FAT32.** (2026-11-14.) I told Mark his 4.7 GB disc image could not go on the card
+    and steered him to the extracted disc; his card takes files over 4 GB. On this runtime the disc image is the
+    faster setup on the Switch (one host file, no per-file opens: Sonic Heroes' fix). Rule: recommend the disc image
+    first; mention the 4 GB limit only as a fallback for a FAT32 card.
