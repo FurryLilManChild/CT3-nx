@@ -1748,7 +1748,7 @@ HLE_STDCALL(D3DDevice_BeginPush, 1) {
 // and 0xA8A00..0xA8E70): a begin/end pair around the model file's own commands, which may be inline vertices
 // (INLINE_ARRAY 0x1818), indices into the vertex buffers bound by SetVertexShaderInput (ARRAY_ELEMENT16 0x1800,
 // ARRAY_ELEMENT32 0x1808) or vertex ranges (DRAW_ARRAYS 0x1810). The runtime drew only the first kind.
-constexpr bool kPushReport = true;  // what the first blocks hold, in the release log; off before measuring
+constexpr bool kPushReport = false;  // what the first blocks hold, in the release log; off before measuring
 HLE_STDCALL(D3DDevice_EndPush, 1) {
     std::lock_guard<HleLock> lock(g_lock);
     constexpr uint32_t kBeginEnd = 0x17FC, kInlineArray = 0x1818, kElement16 = 0x1800, kElement32 = 0x1808,
@@ -1802,9 +1802,12 @@ HLE_STDCALL(D3DDevice_EndPush, 1) {
                     else LOG_FIRST(8, "d3d: EndPush primitive %u dropped, %u bytes of vertices of %u", prim, bytes, stride);
                 } else if (!indices.empty()) {
                     SyncDeferred();
+                    // the model's own vertex buffers: static data, not copied at the draw (backend.h)
+                    gpu::g_draw_static = true;
                     if (g_backend)
                         g_backend->Draw(g_state, prim, 0, uint32_t(indices.size()),
                                         reinterpret_cast<const uint8_t*>(indices.data()));
+                    gpu::g_draw_static = false;
                     n_draws++;
                 }
                 prim = 0;

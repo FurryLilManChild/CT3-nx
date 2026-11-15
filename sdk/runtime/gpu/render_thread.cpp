@@ -233,7 +233,7 @@ public:
             return true;
         }();
         (void)env_copy;
-        const bool copy = g_draw_copy.load(std::memory_order_relaxed);
+        const bool copy = g_draw_copy.load(std::memory_order_relaxed) && !g_draw_static;  // CT3-nx
         bool copied = copy && CopyVertices(s, c, indices);
         cur_->cmds.push_back(c);
         // the batch reads these resources: once per batch for the ones the draw before in it already marked

@@ -62,7 +62,11 @@ bool g_stopped = false;
     if (g_stopped) return
 
 constexpr uint32_t kSlots = 3;
-constexpr uint32_t kUploadMb = 32;   // per slot: vertices, indices, constants, texture staging
+constexpr uint32_t kUploadMb = 24;   // per slot: vertices, indices, constants, texture staging (CT3-nx: 32 before the
+                                     // static vertex cache took the model vertices out of it)
+// CT3-nx: the static vertex cache (StaticVertices): the title's model vertex buffers kept on the GPU
+constexpr uint32_t kStaticCacheMb = 48;
+constexpr uint32_t kStaticMin = 512, kStaticMax = 8u << 20;  // spans cached: smaller ones are cheaper to upload
 constexpr uint32_t kUboRange = 3072;  // b0 and b1: 192 vertex constants, DrawConstants under it
 constexpr DkImageFormat kBgra = DkImageFormat_BGRA8_Unorm;
 constexpr DkImageFormat kDepthFormat = DkImageFormat_Z24S8;
@@ -404,6 +408,115 @@ private:
     std::deque<Job*> jobs_;
 };
 
+// CT3-nx: Crazy Taxi 3 draws ~1,100 model pieces a frame from its own vertex buffers (EndPush, gpu::g_draw_static),
+// and every draw uploaded its vertices again: 6 to 7 MB a frame through the upload ring, 4 ms of the render thread
+// (first Switch run, 2026-11-14), on top of the title thread copying them (draw_copy, 6 ms). The vertices are the
+// models' static data, so each span (title address, length) is uploaded once into GPU memory and drawn from there.
+// A changed span gets new memory (never rewritten in place: the GPU may still read the old one): its first and last
+// 32 bytes are compared at every use, the whole span hashed again every 8 frames. A full cache starts over after the
+// draws recorded so far are submitted and the GPU has finished them (DekoBackend::Draw).
+class StaticVertices {
+public:
+    void Create(dk::Device& device) {
+        block_ = device.CreateBlock(kStaticCacheMb << 20, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached,
+                                    "static vertex cache");
+        cpu_ = static_cast<uint8_t*>(dkMemBlockGetCpuAddr(block_));
+        gpu_ = dkMemBlockGetGpuAddr(block_);
+        size_ = kStaticCacheMb << 20;
+    }
+    static bool Cacheable(const uint8_t* src, uint32_t bytes) {
+        if (bytes < kStaticMin || bytes > kStaticMax) return false;
+        const uintptr_t base = reinterpret_cast<uintptr_t>(kernel::HostPtr(0));
+        return reinterpret_cast<uintptr_t>(src) - base < (uint64_t(1) << 32);  // the title's memory, not a copy
+    }
+    // the GPU address of these vertices, uploading them if new or changed; waits for the GPU (wait_gpu) when full
+    // room for `bytes` more without starting over
+    bool Fits(uint32_t bytes) const { return pos_ + bytes <= size_; }
+    static uint32_t Room(uint32_t bytes) { return (bytes + 255) & ~255u; }
+    // starts over: only once the GPU has finished every draw recorded so far (the caller submits and waits)
+    void Reset() {
+        map_.clear();
+        pos_ = 0;
+        resets_++;
+    }
+    // the GPU address of these vertices, uploading them if new or changed; DK_GPU_ADDR_INVALID if it does not fit
+    DkGpuAddr Get(const uint8_t* src, uint32_t bytes, uint64_t frame) {
+        const Key key{reinterpret_cast<uintptr_t>(src), bytes};
+        auto it = map_.find(key);
+        if (it != map_.end()) {
+            Entry& e = it->second;
+            bool same = std::memcmp(e.head, src, 32) == 0 && std::memcmp(e.tail, src + bytes - 32, 32) == 0;
+            if (same && frame - e.checked >= 8) {
+                same = Hash(src, bytes) == e.hash;
+                e.checked = frame;
+                checked_bytes_ += bytes;
+            }
+            if (same) {
+                hit_bytes_ += bytes;
+                return e.gpu;
+            }
+            changed_++;
+        }
+        const uint32_t room = Room(bytes);
+        if (pos_ + room > size_) return DK_GPU_ADDR_INVALID;
+        std::memcpy(cpu_ + pos_, src, bytes);
+        Entry e;
+        e.gpu = gpu_ + pos_;
+        e.hash = Hash(src, bytes);
+        std::memcpy(e.head, src, 32);
+        std::memcpy(e.tail, src + bytes - 32, 32);
+        e.checked = frame;
+        map_[key] = e;
+        pos_ += room;
+        new_bytes_ += bytes;
+        return e.gpu;
+    }
+    // for the perf line: KB a frame drawn from the cache, uploaded into it, hashed again; MB in use; changed spans; resets
+    void Report(double frames) {
+        LOGR("perf: static vertices a frame: %.0f KB from the cache, %.0f KB uploaded, %.0f KB checked; %.1f of %u MB "
+             "used, %llu changed, %llu resets",
+             double(hit_bytes_) / 1024 / frames, double(new_bytes_) / 1024 / frames,
+             double(checked_bytes_) / 1024 / frames, double(pos_) / 1048576.0, kStaticCacheMb,
+             (unsigned long long)changed_, (unsigned long long)resets_);
+        hit_bytes_ = new_bytes_ = checked_bytes_ = 0;
+        changed_ = 0;
+    }
+
+private:
+    struct Key {
+        uintptr_t src;
+        uint32_t bytes;
+        bool operator==(const Key& o) const { return src == o.src && bytes == o.bytes; }
+    };
+    struct KeyHash {
+        size_t operator()(const Key& k) const { return size_t(k.src * 0x9E3779B97F4A7C15ull ^ k.bytes); }
+    };
+    struct Entry {
+        DkGpuAddr gpu = 0;
+        uint64_t hash = 0, checked = 0;
+        uint8_t head[32], tail[32];
+    };
+    static uint64_t Hash(const uint8_t* p, uint32_t n) {
+        uint64_t h = 0x9E3779B97F4A7C15ull ^ n, h2 = 0xC2B2AE3D27D4EB4Full;
+        uint32_t i = 0;
+        for (; i + 16 <= n; i += 16) {
+            uint64_t a, b;
+            std::memcpy(&a, p + i, 8);
+            std::memcpy(&b, p + i + 8, 8);
+            h = (h ^ a) * 0x100000001B3ull;
+            h2 = (h2 ^ b) * 0x9E3779B97F4A7C15ull;
+        }
+        for (; i < n; i++) h = (h ^ p[i]) * 0x100000001B3ull;
+        return h ^ (h2 >> 1);
+    }
+    DkMemBlock block_ = nullptr;
+    uint8_t* cpu_ = nullptr;
+    DkGpuAddr gpu_ = 0;
+    uint32_t size_ = 0, pos_ = 0;
+    std::unordered_map<Key, Entry, KeyHash> map_;
+    uint64_t hit_bytes_ = 0, new_bytes_ = 0, checked_bytes_ = 0, changed_ = 0, resets_ = 0;
+};
+
 class DekoBackend final : public Backend {
 public:
     ~DekoBackend() override = default;
@@ -539,6 +652,8 @@ private:
     std::vector<Image> retired_[kSlots];
     std::vector<uint32_t> retired_desc_[kSlots];
     uint64_t upload_gen_ = 1;
+    StaticVertices static_vertices_;  // CT3-nx
+    uint64_t static_frame_ = 0;
 
     // descriptors: image slots handed out and freed a frame late, samplers kept for good
     std::vector<uint32_t> free_desc_;
@@ -657,6 +772,7 @@ bool DekoBackend::Init(uint32_t width, uint32_t height) {
     check_frames_ = host::TextureCheckFrames();
     config.command_kb = 2048;
     core_.Create(device_, config);
+    static_vertices_.Create(device_);  // CT3-nx
     free_desc_.clear();
     // the fixed images: the gamma ramp and the black dummies
     if (!CreateImage(lut_, kBgra, 256, 1, 1, 1, 1, false) || !CreateImage(dummy_[0], kBgra, 1, 1, 1, 1, 1, false) ||
@@ -1791,8 +1907,21 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
 
     // everything uploaded before the targets are bound (and before the constants, which may reuse the last draw's upload): a full ring ends the slot, which drops the bound state
     uint32_t need = 2 * kUboRange + 1024 + a.index_count * 4 + 16;
-    for (uint32_t i = 0; i < a.buffer_count; i++) need += a.buffers[i].bytes + 16;
+    // CT3-nx: the title's static model vertices come from the static vertex cache, not the upload ring
+    bool cached[16] = {};
+    uint32_t static_room = 0;
+    for (uint32_t i = 0; i < a.buffer_count; i++) {
+        if ((cached[i] = StaticVertices::Cacheable(a.buffers[i].src, a.buffers[i].bytes)))
+            static_room += StaticVertices::Room(a.buffers[i].bytes);
+        else
+            need += a.buffers[i].bytes + 16;
+    }
     if (core_.UploadFree() < need) Submit(false);
+    if (!static_vertices_.Fits(static_room)) {  // worst case, all new: start over once the GPU has drawn everything
+        Submit(false);
+        core_.WaitGpu();
+        static_vertices_.Reset();
+    }
     // BREXTREME: no state change but bones and vertex buffers since the last draw, same targets and shader kind: its
     // DrawConstants, still in the ring, without building them again
     const DcKey dkey{gpu::g_vsc_generation_valid ? gpu::g_state_generation : 0, draw_rt_, draw_ds_,
@@ -1832,6 +1961,10 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
     DkGpuAddr vbuf[16];
     for (uint32_t i = 0; i < a.buffer_count; i++) {
         const VertexBuffer& b = a.buffers[i];
+        if (cached[i]) {
+            vbuf[i] = static_vertices_.Get(b.src, b.bytes, static_frame_);
+            if (vbuf[i] != DK_GPU_ADDR_INVALID) continue;
+        }
         Upload v = Reserve(std::max<uint32_t>(b.bytes, 4), 16);
         if (b.src && b.bytes) std::memcpy(v.cpu, b.src, b.bytes);
         upload_bytes_ += b.bytes;
@@ -2421,6 +2554,7 @@ void DekoBackend::SaveShot(Target& t, Image* shown) {
 
 void DekoBackend::Present(const Surface& front) {
     DK_GATE();
+    static_frame_++;  // CT3-nx: the static vertex cache's frames
     uint64_t now_ns = TickNs();
     if (last_present_ns_) {
         uint64_t gap = now_ns - last_present_ns_;
@@ -2537,6 +2671,7 @@ void DekoBackend::LogPerf() {
          double(sig_bytes_) / 1024 / n, double(tex_uploads_) / n, double(tex_upload_bytes_) / 1024 / n,
          double(gpu::g_perf_copied_bytes.exchange(0)) / 1024 / n);
     sig_bytes_ = tex_uploads_ = tex_upload_bytes_ = 0;
+    static_vertices_.Report(n);  // CT3-nx
     barriers_full_ = barriers_frag_ = 0;
     auto per = [&](std::atomic<uint64_t>& a) { return double(a.exchange(0)) / n; };
     double raw = per(gpu::g_perf_asm_raw), conv = per(gpu::g_perf_asm_converted), listed = per(gpu::g_perf_asm_listed);

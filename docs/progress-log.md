@@ -2,6 +2,20 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (night): first Switch run
+
+- Into a shift with the ISO in the game folder. Stock clocks (CPU 1020 MHz): menus 51 to 54 fps, the shift 29.7 to
+  30.3 fps (10 s windows). The render thread is the limit: 26 to 31 ms a frame at 1,130 to 1,170 draws (assemble
+  1.7, textures 3.6, constants 4.2, upload 4.0 with 6 to 7 MB of vertices a frame, bind 1.0, samplers 1.0, record
+  1.2, acquire and present 2 to 5), GPU 9.3 ms, the title thread 6 to 7 ms recording (8 to 9 MB a frame of vertex
+  copies, draw_copy). Sonic Heroes: ~380 draws, render thread 11 to 14 ms: about the same cost a draw, three times
+  the draws.
+- Freezes of up to 5 s as the city first loaded: 100 shaders compiled by uam (shadercache on the card from now on).
+- Next build: the model draws EndPush makes skip the title thread's copy (gpu::g_draw_static) and deko3d keeps
+  their vertices in a 48 MB static vertex cache (a span uploaded once; head and tail compared at every use, hashed
+  again every 8 frames; a full cache starts over after the GPU finishes); the upload ring 32 to 24 MB a slot;
+  kPushReport off; profile = true in ct3-settings.toml for the render thread's breakdown by function.
+
 ## 2026-11-14 (night): fourth PC boot
 
 - Cars, traffic and characters draw now (the EndPush change); in a shift 400 to 500 draws a frame, 50 fps on the

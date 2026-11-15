@@ -32,7 +32,7 @@ state_tracking = true
 
 # For development: true records every millisecond which function the game is running, into logs/prof.bin.
 # It costs some performance: leave it false to play.
-profile = false
+profile = true
 
 # false (default): Horizon places the threads. true: the game's main thread gets a CPU core of its own (the render thread
 # another, the rest the third). Measured on the console: no faster than letting Horizon choose.

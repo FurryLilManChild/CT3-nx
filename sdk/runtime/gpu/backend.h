@@ -78,6 +78,10 @@ inline std::atomic<uint32_t> g_render_spin_us{0};
 // thread reads the vertices from the title's memory, which a lock of the buffer waits for (render_thread.cpp). The
 // Switch reads draw_copy from its settings; elsewhere CT3_DRAW_COPY=0/1.
 inline std::atomic<bool> g_draw_copy{true};
+// CT3-nx: set by the title thread around a draw whose vertices are the title's static model data (the model draws
+// EndPush makes): never copied at the draw, the render thread reads them from the title's memory, and a backend may
+// keep them on the GPU (deko3d's static vertex cache)
+inline thread_local bool g_draw_static = false;
 inline std::atomic<uint64_t> g_perf_copied{0}, g_perf_copied_bytes{0};
 
 // STREET (performance): a draw whose constants equal the previous draw's in the same upload ring reuses that upload
