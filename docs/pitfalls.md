@@ -254,3 +254,10 @@ the rule.
     the same build showed 0 to 0.1 buffer locks a frame: the real cause was a memo of one bind per stage. Harmless,
     but a build spent. Rule: when a counter can be added first, ship the counter with the other changes and keep the
     guessed fix until it confirms.
+
+46. **Check the other ports of the same toolchain before tuning alone.** (2026-11-15.) Five Switch rounds tuned the
+    render thread while it shared every core with 13 guest threads, some at higher priority, because core_layout
+    was off (it had measured no gain in another game). Mark had to point at robzilla10001/SwitchPorts:
+    ShaolinMonks-NX, on the same toolchain, keeps its renderer alone on a core. Rule: when the render or title
+    thread is the limit, read the thread placement in the log first, and read the sibling ports' READMEs at the
+    first profile, not after the fifth.
