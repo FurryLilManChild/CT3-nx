@@ -2,6 +2,20 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (night): fourth PC boot
+
+- Cars, traffic and characters draw now (the EndPush change); in a shift 400 to 500 draws a frame, 50 fps on the
+  Legion Go (render thread 5 ms, GPU 4 ms; one 10 s stretch at 35 fps with 9.5 ms a frame of pipeline creation: first
+  time shaders, cached afterwards). The 12 EndPush reports were used up by the boot screens (inline vertices only).
+- No city: a black void under the cars. hdd/Z holds a 10.9 MB `tmp` and the log has `missing Z:\_bank11.mdl`. As on
+  main (2026-11-05, play test 11): the game copies each city model bank to Z:\tmp and renames it while it is open.
+  The runtime's rename (FileRenameInformation) was there, but Windows refuses to rename a file this process holds
+  open (and FAT refuses to rename over an existing file). Fixed in NtSetInformationFile: on failure close the file,
+  remove the target if asked to replace, rename, and reopen it; each rename goes to the log.
+- To check on this runtime later (fixed on main for CRI middleware threads, may or may not apply here): critical
+  section hand-over to the oldest waiter (main 2026-11-08), NtResumeThread ordering, a stand-in KTHREAD for ended
+  threads, suspension counts, the CRI lock spin loop at 0xB33D0 (main's progress log).
+
 ## 2026-11-14 (night): third PC boot
 
 - Reached the game, but no 3D at all: in the menus and character select the characters never appear, and in a

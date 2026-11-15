@@ -846,8 +846,28 @@ KERNEL_EXPORT(226, NtSetInformationFile, 5) {
             std::string target = ReadAnsiString(in + 8);
             std::string host = ResolvePath(target, root);
             if (host.empty()) return kObjectPathNotFound;
+            const bool replace = G<uint8_t>(in) != 0;
             if (f->fp) std::fflush(f->fp);
             fs::rename(f->host, host, ec);
+            // CT3-nx: Windows will not rename a file this process holds open, and FAT (the Switch's card) will not
+            // rename over an existing file. Crazy Taxi 3 copies each city model bank to Z:\tmp and renames it to
+            // its name (_bank11.mdl) while open; failing, the city never loaded (a black void under the cars, third
+            // PC boot). Close it, clear the target when the caller asked to replace, rename, and open it again
+            // (reads and writes seek to f->pos).
+            if (ec) {
+                std::lock_guard<std::mutex> lock(f->io);
+                const bool was_open = f->fp != nullptr;
+                if (was_open) std::fclose(f->fp), f->fp = nullptr;
+                std::error_code ec2;
+                if (replace && fs::exists(host, ec2)) fs::remove(host, ec2);
+                ec.clear();
+                fs::rename(f->host, host, ec);
+                const fs::path now = ec ? f->host : fs::path(host);
+                if (was_open && !(f->fp = std::fopen(now.string().c_str(), "r+b")))
+                    f->fp = std::fopen(now.string().c_str(), "rb");
+            }
+            FILE_REPORT(64, "files: rename %s to %s: %s", f->xbox.c_str(), target.c_str(),
+                        ec ? ec.message().c_str() : "done");
             ForgetGameStats(f->host.string());
             ForgetGameStats(host);
             if (ec) return kAccessDenied;

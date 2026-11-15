@@ -226,3 +226,8 @@ the rule.
     though their addresses were known (SetEG was in my own notes). The first PC boot crashed in SetConeAngles' original
     code. Rule: take the names from the runtime itself (every `SYM(x)`, `HAS_x`, `HLE_*(x)`, `BUFFER(x)` in sdk/runtime,
     switch and game/src) and check each one against game.toml.
+
+41. **Moving a port to a new runtime: go through the old port's fixes first.** (2026-11-14.) The city bank rename
+    that kept CT3's city from loading was found and fixed on main on 2026-11-05 (play test 11); on the new runtime
+    it cost a test round to find again. Rule: before the first boot on a new runtime, list every runtime-level fix
+    in the old port's progress log (files, threads, timing, middleware) and check each one against the new runtime.
