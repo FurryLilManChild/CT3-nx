@@ -53,6 +53,10 @@ void MirrorGamma(const uint8_t* ramp);  // sheroes-nx, below
 #define SYM_D3DDevice_LoadVertexShaderProgram FFFFFE06
 #define HAS_D3DDevice_LoadVertexShaderProgram 0
 #endif
+#ifndef SYM_CDevice_SetStateVB  // CT3-nx: XDK 4531 (Crazy Taxi 3)
+#define SYM_CDevice_SetStateVB FFFFFE14
+#define HAS_CDevice_SetStateVB 0
+#endif
 #ifndef SYM_D3DDevice_SetModelView  // CT3-nx: XDK 4531 (Crazy Taxi 3)
 #define SYM_D3DDevice_SetModelView FFFFFE10
 #define HAS_D3DDevice_SetModelView 0
@@ -540,6 +544,11 @@ HLE_STDCALL(D3D_KickOffAndWaitForIdle, 0) {
     return 0;
 }
 HLE_FASTCALL(CDevice_KickOff, 0) { return 0; }
+// CT3-nx: the library's per-draw state push (thiscall: ecx = the device, one argument, the base vertex). The runtime
+// sends state to the render thread at its own draws; the original ran on state the runtime never fills and crashed
+// at character select (4531: the title's 0xA4796 calls 0xF9630, which calls it with 0 before a BeginPush block;
+// 0xFD89F read 4 bytes at a null pointer).
+HLE_FASTCALL(CDevice_SetStateVB, 1) { return 0; }
 
 HLE_STDCALL(D3DDevice_MakeSpace, 0) {
     LOG_FIRST(16, "d3d: MakeSpace from %08X, some caller still pushes hardware commands", R32(ctx.esp));

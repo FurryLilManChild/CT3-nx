@@ -2135,6 +2135,7 @@ BinkGetSummary                                       = 0
 BinkNextFrame                                        = 0
 BinkWait                                             = 0
 CDevice_KickOff                                      = 0x0F8520
+CDevice_SetStateVB                                   = 0x0FE7D0  # 4531 by hand: thiscall (ecx = dev, base vertex): flushes the dirty states through the lazy setters (0xFE750: point params, textures 0xFD6A0, ...) and the vertex arrays; DrawIndexedVertices 0xF7C24 calls it with [dev + 0x1C]; the title's 0xA4796 reaches it through 0xF9630 with 0 and the original crashed at character select reading [0 + 4] at 0xFD89F (2026-11-14, second PC boot) (XbSymbolDatabase agrees)
 CDirectSoundStream_AddRef                            = 0
 CDirectSoundStream_Discontinuity                     = 0
 CDirectSoundStream_Flush                             = 0

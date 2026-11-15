@@ -2,6 +2,18 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (evening): second PC boot
+
+- Saves work: U: and T: are mapped (`files: link \??\U: -> ...\UDATA\53450004`), and the game wrote its title
+  image, title meta and a save folder under hdd/E/UDATA/53450004. The menus run at the 60 fps cap (55.9 fps over
+  the first 10 s including loading), render thread 2 ms, GPU 1.4 ms a frame on the Legion Go.
+- Crash at character select: read of guest 0x4 at 0xFD89F < 0xFE795 (the lazy state setters 0xFE750) < 0xFE7F8
+  (CDevice_SetStateVB 0xFE7D0) < 0xF963D (0xF9630) < the title's 0xA479B, right before a BeginPush block. The
+  library's per-draw state push ran on state the runtime never fills. Fixed: CDevice_SetStateVB named (XbSymbolDatabase
+  agrees) and replaced by a no-op HLE; the runtime sends state at its own draws.
+- The `files: missing Z:\_*.bin` lines at start are the game probing its cache partition (Z:) for files it writes
+  there later; expected on a fresh hdd folder.
+
 ## 2026-11-14 (evening): first PC boot
 
 - Mark's PC build compiled (Vulkan and D3D12 exes). The game showed the company logos, then crashed; before the logos

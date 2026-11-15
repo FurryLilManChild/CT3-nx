@@ -17,6 +17,7 @@ BinkGetSummary = {}
 BinkNextFrame = {}
 BinkWait = {}
 CDevice_KickOff = {sec = "D3D", len = 0xE3, hash = "0xAB0EA8ED7D7E6A00", calls = [[0x34, "0x10F49DAD2EB4D3CD", []]], k = [0x40, 0x40, 0x40, 0x40, 0x44, 0x35C, 0x2000, 0x2278, 0x2278, 0x2278, 0x2278, 0x227C, 0x2470, 0x2AD4, 0x2AD8, 0xFFFFFFF, 0xFFFFFFF], ret = 0, regs = ["ecx"]}
+CDevice_SetStateVB = {sec = "D3D", len = 0x191, hash = "0xF6798E031DA75BC1", calls = [[0x75, "0x4BD88DD3F57C6876", [[0x165, "0x34300C4BCCB1BD26"], [0x17E, "0xBC02CE80CB7785DD"], [0xAE, "0x858FA25AFC18D2A5"], [0x1E6, "0x3A1B16ECC41B7F3"], [0x1DA, "0xDD972AC5AE5F84DA"], [0x383, "0xD7E2BB5DCD9E7CFD"], [0x33A, "0xE20F1C29261E608D"], [0x1F4, "0xC4C90BC7C0915FEA"]]], [0xF, "0x992EC001666B3982", [[0x173, "0x73BF65E35595A8B4"]]]], k = [0x40, 0x380, 0x41720, 0x41720, 0x41760, 0x41760, 0x3FFFFF8F, 0x40000000], ret = 4, regs = ["ecx"]}
 CDirectSoundStream_AddRef = {}
 CDirectSoundStream_Discontinuity = {}
 CDirectSoundStream_Flush = {}
@@ -272,16 +273,15 @@ shutdown = {}
 socket = {}
 
 [anchors]
-D3D_Streams_ref = {sec = "D3D", len = 0x199, hash = "0xA0AC952E8A65F521", calls = [[0x11, "0x5072EAB10AF84A81", [[0xE6, "0xA7EEEFCAB92E4D10"]]], [0xE3, "0xAB0EA8ED7D7E6A00", [[0x34, "0x10F49DAD2EB4D3CD"]]], [0x1D, "0xB6FEF857C3841887", []], [0x11, "0xE1C2B427D7642E6C", []], [0x119, "0x1F13B42D4914B43D", [[0x62, "0x39DF67CEF83C99D2"], [0x62, "0x39DF67CEF83C99D2"], [0x4E, "0x1F36E2BD67978483"], [0x4E, "0x1F36E2BD67978483"], [0xBB, "0xD2F03E1F18FB6242"], [0xBB, "0xD2F03E1F18FB6242"]]], [0x20, "0xD27E8E64BE393620", [[0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x9C, "0x3E127CEF6093DFB6", [[0x78, "0xB27AA6287B554830"], [0x46, "0x60BEFA9047E0FC04"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"], [0x1E, "0x25794508EBC6E332"]]], [0x1E, "0x25794508EBC6E332", [[0x1DE, "0x586E8ECD29842B28"]]], [0x1A6, "0x6F2D70B9E0272873", [[0xC2, "0x337E037040022F7"], [0x173, "0xDB290C2DDF69DF78"], [0xE8, "0xB62FE4EF588C7ECA"], [0x191, "0xDB54C5A494184BD0"], [0x1FD, "0x9A8F974B9F89A1A7"], [0x97, "0x5C1D22EC071928F0"]]]]}
 
 [data]
 D3D_DeferredTextureState = {in = "D3DDevice_SetTextureStageStateNotInline", insn = 13, op = "disp"}
 D3D_Device = {in = "D3DDevice_SetRenderState_Simple", insn = 0, op = "disp"}
-D3D_DirtyFlags = {in = "D3DDevice_LightEnable", insn = 55, op = "disp"}
+D3D_DirtyFlags = {in = "CDevice_SetStateVB", insn = 2, op = "disp"}
 D3D_IndexData = {}
 D3D_RenderState = {in = "D3DDevice_SetPixelShader", insn = 101, op = "imm"}
 D3D_SimpleRenderStateEncode = {in = "D3DDevice_SetRenderStateNotInline", insn = 4, op = "disp"}
-D3D_Streams = {in = "D3D_Streams_ref", insn = 128, op = "imm"}
+D3D_Streams = {in = "CDevice_SetStateVB", insn = 45, op = "disp"}
 D3D_pDevice = {in = "CDevice_KickOff", insn = 12, op = "disp"}
 DSound_StreamVtable = {}
 DSound_StreamVtable2 = {}
