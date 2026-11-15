@@ -206,26 +206,57 @@ constexpr uint32_t kSigWholeMax = 65536;
 constexpr uint32_t kSigSamples = 64;
 constexpr uint32_t kSigSampleBytes = 64;
 
+// CT3-nx: a texture's signature through four independent multiply chains, 16 bytes each from every 64 byte block,
+// instead of Hash's single chain: Hash waits on each multiply before the next, here four are in flight at once. Only
+// compared with earlier signatures of the same function, never with Hash. ShaolinMonks-NX found its signatures about
+// four times faster on the Switch with independent chains (port/vk/vk_backend.cpp, read as a reference; this is our
+// own arithmetic). Texture checks were part of the largest piece of Crazy Taxi 3's render thread (texture binding,
+// 3 to 3.5 ms a frame in the city; Hash 4.7% of the thread, fourth Switch profile).
+struct WideSig {
+    uint64_t lane[4];
+    explicit WideSig(uint64_t seed) {
+        for (int i = 0; i < 4; i++) lane[i] = seed ^ (0x9E3779B97F4A7C15ull * uint64_t(i + 1));
+    }
+    static uint64_t Mix(uint64_t a, uint64_t b) {
+        unsigned __int128 r = static_cast<unsigned __int128>(a) * b;
+        return uint64_t(r) ^ uint64_t(r >> 64);
+    }
+    void Block(const uint8_t* b) {  // 64 bytes
+        uint64_t w[8];
+        std::memcpy(w, b, sizeof(w));
+        for (int i = 0; i < 4; i++) lane[i] = Mix(w[2 * i] ^ 0xE7037ED1A0B428DBull, w[2 * i + 1] ^ lane[i]);
+    }
+    uint64_t End(const uint8_t* tail, size_t n) const {
+        uint64_t h = Hash(lane, sizeof(lane), 0x2545F4914F6CDD1Dull);
+        return n ? Hash(tail, n, h) : h;
+    }
+};
+
+uint64_t WideHash(const uint8_t* p, size_t n, uint64_t seed) {
+    WideSig w(seed);
+    size_t i = 0;
+    for (; i + 64 <= n; i += 64) w.Block(p + i);
+    return w.End(p + i, n - i);
+}
+
 uint64_t MemSig(uint32_t data, uint32_t total) {
     const uint8_t* p = static_cast<const uint8_t*>(kernel::HostPtr(data));
-    uint64_t sig = Hash(&total, sizeof(total));
-    if (total <= kSigWholeMax) return Hash(p, total, sig);
-    for (uint32_t i = 0; i < kSigSamples; i++) {
-        const uint8_t* sample = p + uint64_t(total - kSigSampleBytes) * i / (kSigSamples - 1);
-        sig = Hash(sample, kSigSampleBytes, sig);
-    }
-    return sig;
+    uint64_t seed = Hash(&total, sizeof(total));
+    if (total <= kSigWholeMax) return WideHash(p, total, seed);
+    WideSig w(seed);
+    for (uint32_t i = 0; i < kSigSamples; i++) w.Block(p + uint64_t(total - kSigSampleBytes) * i / (kSigSamples - 1));
+    return w.End(nullptr, 0);
 }
 
 // a few samples of a texture: between the whole checks of MemSig
 uint64_t MemSigSampled(uint32_t data, uint32_t total) {
     constexpr uint32_t kSamples = 16, kBytes = 64;
     const uint8_t* p = static_cast<const uint8_t*>(kernel::HostPtr(data));
-    uint64_t sig = Hash(&total, sizeof(total), 0x5A3D);
-    if (total <= kSamples * kBytes) return Hash(p, total, sig);
-    for (uint32_t i = 0; i < kSamples; i++)
-        sig = Hash(p + uint64_t(total - kBytes) * i / (kSamples - 1), kBytes, sig);
-    return sig;
+    uint64_t seed = Hash(&total, sizeof(total), 0x5A3D);
+    if (total <= kSamples * kBytes) return WideHash(p, total, seed);
+    WideSig w(seed);
+    for (uint32_t i = 0; i < kSamples; i++) w.Block(p + uint64_t(total - kBytes) * i / (kSamples - 1));
+    return w.End(nullptr, 0);
 }
 
 template <class Target>

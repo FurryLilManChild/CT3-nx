@@ -72,8 +72,8 @@ bool g_dk_cached_upload = true;
 uint32_t g_texture_check_frames = 8;
 // profile: the sampling profiler (profiler.cpp) writes logs/prof.bin
 bool g_profile = false;
-// core_layout: the title thread alone on core 0, the render thread on core 1, the rest on 2 (cores.cpp)
-bool g_core_layout = false;
+// core_layout: the title thread alone on core 0, the render thread alone on core 1, the rest on 2 (cores.cpp)
+bool g_core_layout = true;  // CT3-nx: on (cores.cpp)
 // frame_pacing: "vsync" (default) lets the screen pace the game when vsync is on and the cap is the refresh rate;
 // "timer" also sleeps the title thread to its own 60 Hz grid, as before
 std::string g_frame_pacing = "vsync";

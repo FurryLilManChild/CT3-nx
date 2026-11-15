@@ -34,9 +34,9 @@ state_tracking = true
 # It costs some performance: leave it false to play.
 profile = false
 
-# false (default): Horizon places the threads. true: the game's main thread gets a CPU core of its own (the render thread
-# another, the rest the third). Measured on the console: no faster than letting Horizon choose.
-core_layout = false
+# true (default): the game's main thread gets a CPU core of its own, the render thread another, every other thread the
+# third. false: Horizon places the threads.
+core_layout = true
 
 # "vsync" (default): with vsync on and fps_cap 60, the screen paces the game (smoother: a slow frame now and then is
 # hidden by the frames already queued). "timer": the game also waits on its own 60 Hz clock (the older builds).

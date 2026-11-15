@@ -2,6 +2,22 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15: sixth Switch run, and a look at the other Xbox ports
+
+- Mark: still slowdowns into the 40s. The shift: 47.4 to 59.6 fps; texture stages remembered 68 to 91% (was 61 to
+  64%), but the render thread still 15 to 17 ms a frame at 1,100 to 1,430 draws, texture binding 2.7 to 3.6 ms.
+- Mark asked for a look at robzilla10001/SwitchPorts' Xbox ports. Read (READMEs and, for ShaolinMonks-NX, its source
+  as a reference): ShaolinMonks-NX (XboxXBERecomp, Vulkan, 60 fps at full speed) pins every guest thread to one core
+  and its renderer alone on another (port/nx/threads.cpp); it hashes textures with independent multiply chains (about
+  four times faster); it marks state pieces written so the hand-off compares only those (port/common/state_dirty.h).
+  COLD-FEAR-NX-PORT (xboxrecomp) instances repeated draws (RECOMP_VK_INSTANCE). doa2u/doa3-nx keep the renderer
+  on core 1 and audio on core 2. WOTW-NX, nights-nx, OpenTrickyNX, conker: nothing new for this.
+- Our port had core_layout off: all 13 guest threads, the sound and vertical blank threads and the render thread on
+  any core at once, the title's time critical threads above the render thread's priority. Next build (Switch
+  speed): core_layout on by default with the render thread alone on core 1 (title core 0, every other thread core
+  2), and texture signatures through four independent multiply chains (2x on x86 in a quick test, likely more on the
+  Switch's cores).
+
 ## 2026-11-15: fifth Switch run
 
 - Mark: "still making progress". The shift ran 50.6 to 59.7 fps (10 s windows: 57.9, 50.6, 59.7, 58.3, 58.0, 53.9,
