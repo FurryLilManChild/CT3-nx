@@ -703,7 +703,13 @@ private:
                                     vsc_end = vsc_at + sizeof(state_.vsc);
                 static const size_t streams_at = size_t(reinterpret_cast<const uint8_t*>(&state_.streams) - s),
                                     streams_end = streams_at + sizeof(state_.streams);
-                bool vsc_changed = false, other_changed = c.vs >= 0 || c.ps >= 0;
+                static const size_t mv_at = size_t(reinterpret_cast<const uint8_t*>(&state_.mv_count) - s),
+                                    mv_end = size_t(reinterpret_cast<const uint8_t*>(&state_.mv_screen) - s) +
+                                             sizeof(state_.mv_screen);
+                static const size_t world_at =
+                                        size_t(reinterpret_cast<const uint8_t*>(&state_.transforms[256]) - s),  // D3DTS_WORLD
+                                    world_end = world_at + sizeof(state_.transforms[256]);
+                bool vsc_changed = false, other_changed = c.vs >= 0 || c.ps >= 0, unplaced_changed = other_changed;
                 for (const uint8_t *p = data, *next; p < data + c.size; p = next) {
                     uint32_t head[2];
                     std::memcpy(head, p, 8);
@@ -719,8 +725,11 @@ private:
                         std::memcpy(s + head[0], p + 8, head[1]);
                     }
                     vsc_changed |= lo < vsc_end && hi > vsc_at;
-                    other_changed |= !(lo >= vsc_at && hi <= vsc_end) && !(lo >= streams_at && hi <= streams_end);
+                    const bool other = !(lo >= vsc_at && hi <= vsc_end) && !(lo >= streams_at && hi <= streams_end);
+                    other_changed |= other;
+                    unplaced_changed |= other && !(lo >= mv_at && hi <= mv_end) && !(lo >= world_at && hi <= world_end);
                 }
+                if (unplaced_changed) g_placed_generation++;
                 if (vsc_changed) g_vsc_generation++;
                 if (other_changed) g_state_generation++;
                 if (c.vs >= 0) state_.vs = b.vs[size_t(c.vs)];

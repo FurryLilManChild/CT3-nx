@@ -747,6 +747,23 @@ private:
     uint64_t phase_ns_[kPhases] = {};
     uint64_t const_reused_ = 0, const_uploaded_ = 0, upload_bytes_ = 0;
     uint64_t draw_kind_[4] = {};  // CT3-nx: vertex program, fixed unlit, fixed lit, fixed blended (unlit)
+    // CT3-nx: draws that repeat the one before but for where the model is placed (instancing's opportunity, as
+    // COLD-FEAR-NX-PORT's RECOMP_VK_INSTANCE): same placed generation, shaders, targets, streams and indices
+    struct RepeatKey {
+        uint64_t placed = 0, vkey = 0, pkey = 0;
+        const void* rt = nullptr;
+        const void* ds = nullptr;
+        const void* index_src = nullptr;
+        uint32_t index_count = 0, draw_count = 0, buffer_count = 0;
+        int32_t base_vertex = 0;
+        uint32_t topology = 0;
+        std::array<const uint8_t*, 4> src{};
+        std::array<uint32_t, 4> stride{};
+        bool operator==(const RepeatKey&) const = default;
+    };
+    RepeatKey last_repeat_;
+    bool last_was_repeat_ = false;
+    uint64_t repeat_draws_ = 0, repeat_runs_ = 0, repeat_fixed_ = 0;
     uint64_t stage_memo_hits_ = 0, stage_memo_misses_ = 0;
     uint64_t sig_bytes_ = 0, tex_uploads_ = 0, tex_upload_bytes_ = 0;
     uint32_t check_frames_ = 1;
@@ -1958,6 +1975,32 @@ void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t c
     DrawConstants c;
     const size_t cbytes = gpu::DrawConstantBytes(sh.fixed_transform, (sh.fk.light & 1) != 0, sh.fk.blend != 0);
     draw_kind_[!sh.fixed_transform ? 0 : (sh.fk.light & 1) ? 2 : sh.fk.blend ? 3 : 1]++;
+    {
+        RepeatKey k;
+        k.placed = gpu::g_placed_generation;
+        k.vkey = sh.vkey;
+        k.pkey = sh.pkey;
+        k.rt = draw_rt_;
+        k.ds = draw_ds_;
+        k.index_src = a.index_src;
+        k.index_count = a.index_count;
+        k.draw_count = a.draw_count;
+        k.buffer_count = a.buffer_count;
+        k.base_vertex = a.base_vertex;
+        k.topology = uint32_t(a.topology);
+        for (uint32_t i = 0; i < std::min<uint32_t>(a.buffer_count, 4); i++) {
+            k.src[i] = a.buffers[i].src;
+            k.stride[i] = a.buffers[i].stride;
+        }
+        const bool repeat = a.vertices.empty() && k == last_repeat_;
+        if (repeat) {
+            repeat_draws_++;
+            if (sh.fixed_transform) repeat_fixed_++;
+            if (!last_was_repeat_) repeat_runs_++;
+        }
+        last_was_repeat_ = repeat;
+        last_repeat_ = k;
+    }
     if (!dc_same) {
         std::memset(&c, 0, cbytes);
         FillSurfaceConstants(s, size, c);
@@ -2697,6 +2740,9 @@ void DekoBackend::LogPerf() {
     LOGR("perf: draws a frame by kind: %.0f vertex program, %.0f fixed unlit, %.0f fixed lit, %.0f fixed blended",
          double(draw_kind_[0]) / n, double(draw_kind_[1]) / n, double(draw_kind_[2]) / n, double(draw_kind_[3]) / n);
     std::memset(draw_kind_, 0, sizeof(draw_kind_));
+    LOGR("perf: draws a frame repeating the one before but for its placement: %.0f (%.0f fixed function), in %.0f runs",
+         double(repeat_draws_) / n, double(repeat_fixed_) / n, double(repeat_runs_) / n);
+    repeat_draws_ = repeat_fixed_ = repeat_runs_ = 0;
     LOGR("perf: textures a frame: %.0f KB checked, %.1f uploaded (%.0f KB); vertices copied by the title thread %.0f KB",
          double(sig_bytes_) / 1024 / n, double(tex_uploads_) / n, double(tex_upload_bytes_) / 1024 / n,
          double(gpu::g_perf_copied_bytes.exchange(0)) / 1024 / n);

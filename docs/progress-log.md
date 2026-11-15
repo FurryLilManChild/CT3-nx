@@ -15,6 +15,11 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
 - Next build (Switch speed): an unlit draw that does not blend sends 1,088 of the 2,528 bytes of draw constants
   (DrawConstantBytes; the shader layout is unchanged, so the card's cache still holds); a perf line counts draws by
   kind (vertex program, unlit, lit, blended); new shaders logged by name.
+- Mark: stock clocks stay the target (Sonic Heroes reached 60 at stock); take promising techniques from the other
+  ports. COLD-FEAR-NX-PORT (MIT, sp00nz's xboxrecomp, nv2a_vk.c "Instancing"): a run of draws that repeat the one
+  before but for the transform constants becomes one instanced draw (a quarter of NFSU2's draws). Build 8 also
+  counts CT3's such runs first (g_placed_generation: the state generation not moved by the model view or world
+  matrix; perf line "repeating the one before but for its placement"), to size the work before writing it.
 
 ## 2026-11-15: sixth Switch run, and a look at the other Xbox ports
 

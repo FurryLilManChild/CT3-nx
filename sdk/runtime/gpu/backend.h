@@ -96,6 +96,9 @@ inline bool g_vsc_generation_valid = false;
 // shader): a draw with the same generation, targets and shader kind as the last has its DrawConstants. Most of this
 // game's draws change only bones and vertex buffers. Valid with g_vsc_generation_valid.
 inline uint64_t g_state_generation = 1;
+// CT3-nx: the same, but not moved by the model view (State::mv_count to mv_screen) or the world matrix: two draws
+// with the same value differ at most in where the model is placed (and their streams). For instancing repeats.
+inline uint64_t g_placed_generation = 1;
 
 // F3: save the next frame, every draw and target, under diag::CaptureDir
 inline std::atomic<bool> g_capture{false};
