@@ -295,7 +295,7 @@ std::shared_ptr<File> FileFromHandle(uint32_t h) {
 
 // CT3-nx: file diagnostics in the release log (LOGR) while saves and the drive setup are brought up; switch off
 // before measuring speed (missing files are probed often)
-constexpr bool kFileReport = true;
+constexpr bool kFileReport = false;  // CT3-nx: off for speed runs (on for the PC bring-up)
 #define FILE_REPORT(n, ...)                                                                      \
     do {                                                                                         \
         static std::atomic<int> _c{0};                                                           \

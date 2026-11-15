@@ -2,6 +2,21 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15: fifth Switch run
+
+- Mark: "still making progress". The shift ran 50.6 to 59.7 fps (10 s windows: 57.9, 50.6, 59.7, 58.3, 58.0, 53.9,
+  48.1 at a busy corner), the render thread 12 to 16.8 ms a frame at 870 to 1,230 draws (was 16 to 21 ms):
+  constants 2.2 to 2.5 ms (were 3.2 to 4.1), textures still 2.7 to 3.5 ms.
+- The new lock counter shows 0 to 0.1 locks of buffers a frame: buffer locks were not why texture stages were
+  forgotten (pitfall 45). The stage memo kept only the last bind of each stage, and Crazy Taxi 3 changes texture
+  most draws, so it matched 61 to 64%.
+- Mark asked what Sonic Heroes had that this has not: its settings are the same as ours except the profiler, and
+  everything it needed is in (disc image, sampler key, draw_copy, lazy opens). The step left was its last one:
+  diagnostics off before the measurement run. Sonic Heroes needed no render thread work because it drew about 380
+  times a frame; this city draws 1,100 to 1,300.
+- Next build (Switch speed): each stage remembers its last 64 binds, not one; the profiler (profile = false) and the
+  file report (kFileReport) off for a clean measurement.
+
 ## 2026-11-15: fourth Switch run
 
 - Mark: "definite improvement". The vertical blank fix took the shift from 31 to 42 fps to 47 to 58 fps (10 s

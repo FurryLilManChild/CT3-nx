@@ -248,3 +248,9 @@ the rule.
     thread while the title thread was also sleeping a flat 16 ms a frame in an upstream BlockUntilVerticalBlank HLE
     (fine for games that never call it). The first profile already showed the title thread asleep in it. Rule: on
     every profile, list where the title thread sleeps and check each wait's HLE against what the console does.
+
+45. **Count before naming a cause in a build.** (2026-11-15.) Build 5 stopped buffer locks from moving the texture
+    dirty epoch, on the guess that they were why only 60% of texture stages were remembered. The counter added in
+    the same build showed 0 to 0.1 buffer locks a frame: the real cause was a memo of one bind per stage. Harmless,
+    but a build spent. Rule: when a counter can be added first, ship the counter with the other changes and keep the
+    guessed fix until it confirms.

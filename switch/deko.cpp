@@ -683,7 +683,12 @@ private:
         float k = 1, wide = 0;
         Image* img = nullptr;
     };
-    StageMemo stage_memo_[4];
+    // CT3-nx: the last 64 binds of each stage (by texture header and words), not only the last one. Crazy Taxi 3 draws
+    // 1,100 to 1,300 times a frame and changes texture most draws, so the last bind matched 61 to 64% of the time and
+    // texture binding stayed the largest part of the render thread (3.1 to 3.5 ms a frame, fifth Switch run,
+    // 2026-11-15). The rules for a hit are unchanged: same frame, dirty epoch, image generation and targets.
+    static constexpr uint32_t kStageMemoSlots = 64;
+    StageMemo stage_memo_[4][kStageMemoSlots];
     bool stage_uncached_ = false;  // the bind read a palette or a feedback copy: not remembered
     uint64_t bind_gen_ = 1;        // bumped when an image is made or retired
     struct SamplerMemo {
@@ -1722,9 +1727,11 @@ uint32_t DekoBackend::BindTexture(const State& s, int stage, DrawTextures& stage
 bool DekoBackend::BindStageTextures(const State& s, DrawTextures& stages) {
     const uint64_t dirty = DirtyEpochNow();
     for (int i = 0; i < 4; i++) {
-        StageMemo& m = stage_memo_[i];
         uint32_t header = s.textures[size_t(i)], words[5] = {};
         if (header) std::memcpy(words, kernel::HostPtr(header), sizeof(words));
+        uint32_t slot = header ^ words[1] * 0x9E3779B1u ^ words[2] * 0x85EBCA77u ^ s.palettes[size_t(i)] * 0xC2B2AE3Du;
+        slot = (slot ^ (slot >> 15) ^ (slot >> 7)) % kStageMemoSlots;
+        StageMemo& m = stage_memo_[i][slot];
         if (m.valid && m.header == header && m.palette == s.palettes[size_t(i)] && m.frame == presents_ &&
             m.dirty == dirty && m.gen == bind_gen_ && m.rt == draw_rt_ && m.ds == draw_ds_ &&
             !std::memcmp(m.words, words, sizeof(words))) {
