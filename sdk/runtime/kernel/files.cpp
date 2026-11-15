@@ -293,6 +293,18 @@ std::shared_ptr<File> FileFromHandle(uint32_t h) {
     return std::static_pointer_cast<File>(o);
 }
 
+// CT3-nx: file diagnostics in the release log (LOGR) while saves and the drive setup are brought up; switch off
+// before measuring speed (missing files are probed often)
+constexpr bool kFileReport = true;
+#define FILE_REPORT(n, ...)                                                                      \
+    do {                                                                                         \
+        static std::atomic<int> _c{0};                                                           \
+        if (_c.fetch_add(1, std::memory_order_relaxed) < (n)) {                                  \
+            if (kFileReport) LOGR(__VA_ARGS__);                                                  \
+            else LOGI(__VA_ARGS__);                                                              \
+        }                                                                                        \
+    } while (0)
+
 std::string ObjectName(uint32_t attrs, uint32_t* root = nullptr) {
     if (root) *root = R32(attrs);
     return ReadAnsiString(R32(attrs + 4));
@@ -348,7 +360,7 @@ void MountDefaults(const std::string& game_dir, const std::string& data_dir) {
 bool CreateSymbolicLink(const std::string& link, const std::string& target) {
     std::lock_guard<std::mutex> lock(g_links_lock);
     g_links[Upper(Normalize(link))] = Normalize(target);
-    LOGI("files: link %s -> %s", link.c_str(), target.c_str());
+    FILE_REPORT(32, "files: link %s -> %s", link.c_str(), target.c_str());
     return true;
 }
 
@@ -417,7 +429,7 @@ Target Resolve(const std::string& xbox_path, uint32_t root_handle) {
 uint32_t OpenOnDisc(const Disc::Entry* e, const std::string& name, uint32_t handle_out, uint32_t iosb, uint32_t disposition,
                     uint32_t options) {
     if (!e && (disposition == 1 || disposition == 4)) {  // FILE_OPEN or FILE_OVERWRITE need an existing file
-        LOG_FIRST(200, "missing %s", name.c_str());
+        FILE_REPORT(100, "files: missing %s", name.c_str());
         IoStatus(iosb, kObjectNameNotFound, 5);
         return kObjectNameNotFound;
     }
@@ -468,7 +480,7 @@ KERNEL_EXPORT(190, NtCreateFile, 9) {
     if (t.disc) return OpenOnDisc(t.entry, name, handle_out, iosb, disposition, options);
     const std::string& host = t.host;
     if (host.empty()) {
-        LOGW("NtCreateFile: no mapping for %s", name.c_str());
+        FILE_REPORT(50, "NtCreateFile: no mapping for %s", name.c_str());
         IoStatus(iosb, kObjectPathNotFound, 0);
         return kObjectPathNotFound;
     }
@@ -512,7 +524,7 @@ KERNEL_EXPORT(190, NtCreateFile, 9) {
             break;
         case 1:  // open
             if (!exists) {
-                LOG_FIRST(200, "missing %s", name.c_str());
+                FILE_REPORT(100, "files: missing %s", name.c_str());
                 IoStatus(iosb, kObjectNameNotFound, 5);
                 return kObjectNameNotFound;
             }
@@ -555,7 +567,7 @@ KERNEL_EXPORT(190, NtCreateFile, 9) {
     FILE* fp = lazy ? nullptr : std::fopen(host.c_str(), mode);
     if (!fp && !lazy && std::string(mode) == "r+b") fp = std::fopen(host.c_str(), "rb");  // read only media
     if (!fp && !lazy) {
-        LOGW("NtCreateFile: cannot open %s", host.c_str());
+        FILE_REPORT(50, "NtCreateFile: cannot open %s", host.c_str());
         IoStatus(iosb, kAccessDenied, 0);
         return kAccessDenied;
     }
@@ -583,7 +595,7 @@ KERNEL_EXPORT(202, NtOpenFile, 6) {
     const std::string& host = t.host;
     const HostStat hs = host.empty() ? HostStat{} : Stat(host);
     if (!hs.exists) {
-        LOG_FIRST(200, "missing %s", name.c_str());
+        FILE_REPORT(100, "files: missing %s", name.c_str());
         IoStatus(iosb, kObjectNameNotFound, 5);
         return host.empty() ? kObjectPathNotFound : kObjectNameNotFound;
     }
@@ -941,7 +953,7 @@ KERNEL_EXPORT(210, NtQueryFullAttributesFile, 2) {
     std::string name = ReadAnsiString(R32(a[0] + 4));
     Target t = Resolve(name, R32(a[0]));
     if (t.disc ? !t.entry : t.host.empty() || !Stat(t.host).exists) {
-        LOG_FIRST(200, "missing %s", name.c_str());
+        FILE_REPORT(100, "files: missing %s", name.c_str());
         return kObjectNameNotFound;
     }
     if (t.disc) FillNetworkInfo(a[1], *t.entry);
@@ -970,9 +982,30 @@ KERNEL_EXPORT(200, NtFsControlFile, 10) {
 }
 
 KERNEL_EXPORT(196, NtDeviceIoControlFile, 10) {
-    uint32_t iosb = a[4], code = a[5], out = a[8], out_len = a[9];
-    LOG_FIRST(16, "NtDeviceIoControlFile: code %08X", code);
+    uint32_t iosb = a[4], code = a[5], in = a[6], in_len = a[7], out = a[8], out_len = a[9];
+    FILE_REPORT(16, "NtDeviceIoControlFile: code %08X", code);
     if (out && out_len) std::memset(HostPtr(out), 0, out_len);
+    // CT3-nx: IOCTL_SCSI_PASS_THROUGH_DIRECT, MODE SENSE(10) of the Xbox DVD security page (0x3E). XAPI's start-up
+    // (4531: 0xE442D, from XapiInitProcess 0xE457F) asks it of titles whose certificate allows only Xbox DVDs
+    // (AllowedMedia 2, Crazy Taxi 3) and wants the disc authenticated: data +0xA partition, +0xB authenticated = 1,
+    // +0xC book type, all non-zero. Unanswered it retried five times and booted to the dashboard, which here skipped
+    // XapiSetupPerTitleDriveLetters: no U: and T: drives, so no saves ("can't create a save", first PC boot).
+    if (code == 0x4D014 && in && in_len >= 0x2C) {
+        const uint8_t* cdb = static_cast<const uint8_t*>(HostPtr(in + 0x1C));
+        uint32_t buf = R32(in + 0x14), len = R32(in + 0xC);
+        if (cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E && buf && len >= 0x10) {
+            uint8_t* d = static_cast<uint8_t*>(HostPtr(buf));
+            std::memset(d, 0, len);
+            d[1] = uint8_t(len - 2);  // mode data length (big endian, low byte)
+            d[8] = 0x3E;              // the page
+            d[9] = uint8_t(len - 10);
+            d[0xA] = 1;     // partition (the game partition)
+            d[0xB] = 1;     // authenticated
+            d[0xC] = 0xD1;  // book type and version (Xbox DVD)
+            d[0xD] = 0x0F;  // disc category
+            LOGR("files: answered the DVD security check (MODE SENSE page 0x3E): disc authenticated");
+        }
+    }
     if (code == 0x70000 && out_len >= 0x18) {  // IOCTL_DISK_GET_DRIVE_GEOMETRY
         W64(out, 1000);
         W32(out + 8, 12);

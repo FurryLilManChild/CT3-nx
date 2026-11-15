@@ -2,6 +2,23 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-14 (evening): first PC boot
+
+- Mark's PC build compiled (Vulkan and D3D12 exes). The game showed the company logos, then crashed; before the logos
+  it said it could not create a save.
+- Crash (build-pc/logs/ct3.log): read of guest 0xB4 under 0x107090 < 0x107484 < 0xA0D02. The game's call 0xA0CFD goes
+  to IDirectSoundBuffer_SetConeAngles 0x107463, whose original code ran on the runtime's buffer object: game.toml
+  had no entry for it. Cause: [symbols] was built from 5659's signatures.toml, which lacks the names Sonic Heroes
+  added by hand (pitfall 40). Fixed: the generator now takes every name the runtime uses; SetConeAngles 0x107463,
+  SetEG 0x106678 and SetPitch 0x10665C added with evidence (signatures: 140 functions).
+- Save message: XapiInitProcess (0xE451C) checks a disc that only Xbox DVDs may run from (certificate AllowedMedia 2)
+  with IOCTL_SCSI_PASS_THROUGH_DIRECT, MODE SENSE(10) of the DVD security page 0x3E (0xE442D), and wants it
+  authenticated (data +0xB = 1, +0xA and +0xC non-zero). The runtime returned zeros, the check failed five times and
+  XapiBootToDash was called, so XapiSetupPerTitleDriveLetters (0xE4373) never mapped U: and T:. No UDATA folder was
+  created under hdd/E. Fixed in NtDeviceIoControlFile: the page is answered as an authenticated Xbox DVD.
+- File diagnostics (kFileReport in files.cpp, on for now): missing files, failed opens, drive links and device
+  controls go to the release log.
+
 ## 2026-11-14: branch xbe-recomp started
 
 - Mark: review the Sonic Heroes move (sheroes-nx `xbe-recomp`, 60 fps at stock clocks on 2026-11-14) and the updated

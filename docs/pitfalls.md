@@ -219,3 +219,10 @@ the rule.
 39. **No `rm -rf` with a glob after a `cd`.** (2026-11-14.) Clearing the new worktree with `cd dir; rm -rf ./*` was
     blocked by the safety check, rightly: if the `cd` failed it would have emptied the wrong folder. `git rm -r` in
     the worktree did the same job safely.
+
+40. **The list of names the runtime needs is every SYM_ it uses, not the nearest build's signatures file.** (2026-11-14.)
+    I built CT3's game.toml `[symbols]` from 5659's signatures.toml. Sonic Heroes had named IDirectSoundBuffer_SetConeAngles,
+    SetEG and SetPitch by hand in its game.toml, so they were never in that file, and CT3's game.toml left them out even
+    though their addresses were known (SetEG was in my own notes). The first PC boot crashed in SetConeAngles' original
+    code. Rule: take the names from the runtime itself (every `SYM(x)`, `HAS_x`, `HLE_*(x)`, `BUFFER(x)` in sdk/runtime,
+    switch and game/src) and check each one against game.toml.
