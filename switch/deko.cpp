@@ -784,10 +784,10 @@ bool DekoBackend::Init(uint32_t width, uint32_t height) {
     compiler_.Start();
     gpu::g_native_polygons = true;  // fans, quads and polygons drawn as they are, without a rebuilt triangle list
     gpu::g_packed_strides = true;   // 6 and 3 byte vertices read as they are, not converted on the CPU
-    // ZCULL off until checked (NFSMW-NX's item 6). CT3-nx: on, it cut the GPU's time at 960x720 and 307 MHz from about
-    // 22 to 18 ms (eleventh Switch run), but its picture was never checked on its own, and at the handheld default of
-    // 83% (9.3 ms with it, about 12 without) it is not needed (Mark, 2026-11-15: leave it out)
-    device_.Create(false);
+    // CT3-nx: ZCULL on (build 11, handheld GPU work): the GPU's coarse depth test, which skips hidden pixels before
+    // shading. Off until checked (NFSMW-NX's item 6); Crazy Taxi 3 is GPU bound at the handheld clock (22.4 ms a frame
+    // at 307 MHz in the city, tenth Switch run)
+    device_.Create(true);
     dk::CoreConfig config;
     config.slots = kSlots;
     config.upload_mb = kUploadMb;

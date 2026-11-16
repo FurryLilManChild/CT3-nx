@@ -273,3 +273,8 @@ the rule.
     the GPU was never at its handheld clock (307 MHz), where it turned out to be the limit. Rule: before reading any
     speed number, check CPU, GPU and memory clocks and docked or handheld against what the test claims, and say so
     when they differ.
+
+49. **Settle a build's contents with Mark before building it.** (2026-11-15.) Build 12 was compiled while its plan
+    was still open; Mark then dropped ZCULL, I rebuilt, he kept it, and it was rebuilt again. Mark: do not build
+    anything until what goes in the build is final. Rule: present the plan, wait until he agrees on every item, then
+    build.
