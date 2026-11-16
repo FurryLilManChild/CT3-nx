@@ -266,3 +266,10 @@ the rule.
     NV2A executor (RECOMP_PAUSE_HOLD); this branch's deko3d backend never got it, and Mark found it again. Same lesson
     as pitfall 41, for the renderer: when moving to a new backend, list the old one's game-specific fixes (main's
     progress log, "Fix (nv2a_...)") and carry each over or show why it is not needed.
+
+48. **Read the clocks line of every log against the test's conditions.** (2026-11-15.) Every Switch log of this
+    branch began with "clocks: now cpu 1020, gpu 768, mem 1331 MHz": 768 MHz is the docked GPU clock, set in handheld
+    by Mark's sys-clk. I read past it for ten runs and called the results "stock clocks". The CPU work was real, but
+    the GPU was never at its handheld clock (307 MHz), where it turned out to be the limit. Rule: before reading any
+    speed number, check CPU, GPU and memory clocks and docked or handheld against what the test claims, and say so
+    when they differ.

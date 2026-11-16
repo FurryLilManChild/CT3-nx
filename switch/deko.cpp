@@ -750,6 +750,13 @@ private:
     // CT3-nx: the pause hold (main's RECOMP_PAUSE_HOLD, nv2a_pb_exec.c, 2026-11-06): the frame just shown when it
     // cleared its colour (a full frame), and whether this frame has cleared colour or drawn yet
     gpu::Surface last_full_{};
+    // CT3-nx: the handheld GPU sweep (diagnostic, build 11): once the city is drawn, every 15 s the next of four
+    // settings, and per phase the average GPU time, draws and frames; kGpuSweep off for normal builds
+    static constexpr bool kGpuSweep = true;
+    int sweep_phase_ = -1;
+    uint64_t sweep_start_ns_ = 0, sweep_gpu_ns_ = 0, sweep_gpu_works_ = 0, sweep_frames_ = 0, sweep_draws_ = 0;
+    uint32_t sweep_base_pct_ = 100, sweep_base_aniso_ = 0;
+    void SweepStep(uint64_t now_ns);
     bool frame_colour_cleared_ = false;
     uint32_t frame_draws_ = 0;
     uint64_t stage_memo_hits_ = 0, stage_memo_misses_ = 0;
@@ -777,7 +784,10 @@ bool DekoBackend::Init(uint32_t width, uint32_t height) {
     compiler_.Start();
     gpu::g_native_polygons = true;  // fans, quads and polygons drawn as they are, without a rebuilt triangle list
     gpu::g_packed_strides = true;   // 6 and 3 byte vertices read as they are, not converted on the CPU
-    device_.Create(false);  // ZCULL off until checked (NFSMW-NX's item 6)
+    // CT3-nx: ZCULL on (build 11, handheld GPU work): the GPU's coarse depth test, which skips hidden pixels before
+    // shading. Off until checked (NFSMW-NX's item 6); Crazy Taxi 3 is GPU bound at the handheld clock (22.4 ms a frame
+    // at 307 MHz in the city, tenth Switch run)
+    device_.Create(true);
     dk::CoreConfig config;
     config.slots = kSlots;
     config.upload_mb = kUploadMb;
@@ -1068,6 +1078,8 @@ void DekoBackend::ReadTiming(uint32_t slot) {
     if (t1 > t0) {
         gpu_ns_ += uint64_t(double(t1 - t0) * dk::kNsPerGpuUnit);
         gpu_works_++;
+        sweep_gpu_ns_ += uint64_t(double(t1 - t0) * dk::kNsPerGpuUnit);
+        sweep_gpu_works_++;
     }
 }
 
@@ -2568,6 +2580,40 @@ void DekoBackend::ReleaseOldTextures() {
     }
 }
 
+// CT3-nx: the handheld GPU sweep. Starts at the first frame of 500 draws or more (the city), then 15 s per phase:
+// 0 the settings as they are, 1 anisotropic filtering off, 2 render 83% (800x600 for the 640x480 game), 3 render 67%
+// (640x480, the Xbox's own size), round and round. Each phase's line: GPU ms a frame, frames a second, draws a frame.
+void DekoBackend::SweepStep(uint64_t now_ns) {
+    sweep_frames_++;
+    sweep_draws_ += frame_draws_;
+    if (sweep_phase_ < 0) {
+        if (frame_draws_ < 500) {
+            sweep_gpu_ns_ = sweep_gpu_works_ = sweep_frames_ = sweep_draws_ = 0;
+            return;
+        }
+        sweep_base_pct_ = app::Get().render_percent;
+        sweep_base_aniso_ = app::Get().aniso;
+        sweep_phase_ = 0;
+        sweep_start_ns_ = now_ns;
+        sweep_gpu_ns_ = sweep_gpu_works_ = sweep_frames_ = sweep_draws_ = 0;
+        LOGR("gpu sweep: start (render %u%%, anisotropic %u)", sweep_base_pct_, sweep_base_aniso_);
+        return;
+    }
+    if (now_ns - sweep_start_ns_ < 15000000000ull) return;
+    static const char* const kNames[4] = {"as set", "anisotropic off", "render 83%", "render 67%"};
+    const double secs = double(now_ns - sweep_start_ns_) / 1e9;
+    LOGR("gpu sweep: phase %d (%s): gpu %.2f ms a frame, %.1f fps, %.0f draws a frame", sweep_phase_,
+         kNames[sweep_phase_], sweep_gpu_works_ ? double(sweep_gpu_ns_) / 1e6 / double(sweep_gpu_works_) : -1.0,
+         double(sweep_frames_) / secs, sweep_frames_ ? double(sweep_draws_) / double(sweep_frames_) : 0.0);
+    sweep_phase_ = (sweep_phase_ + 1) % 4;
+    app::Settings& st = app::Get();
+    st.aniso = sweep_phase_ == 1 ? 0 : sweep_base_aniso_;
+    st.render_percent = sweep_phase_ == 2 ? 83 : sweep_phase_ == 3 ? 67 : sweep_base_pct_;
+    ApplySettings();
+    sweep_start_ns_ = now_ns;
+    sweep_gpu_ns_ = sweep_gpu_works_ = sweep_frames_ = sweep_draws_ = 0;
+}
+
 void DekoBackend::ApplySettings() {
     float want = app::RenderScale(guest_h_);
     if (std::fabs(want - scale_) <= 1e-4f) return;
@@ -2630,6 +2676,7 @@ void DekoBackend::Present(const Surface& front) {
         }
     }
     last_present_ns_ = now_ns;
+    if (kGpuSweep) SweepStep(now_ns);
     last_full_ = frame_colour_cleared_ ? front : gpu::Surface{};
     frame_colour_cleared_ = false;
     frame_draws_ = 0;

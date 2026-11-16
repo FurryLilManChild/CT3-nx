@@ -2,6 +2,19 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15 (night): tenth Switch run (PGO), and the GPU clock
+
+- PGO worked on the CPU side: render thread about 11 us a draw (12.4 ms at 1,051 draws, 12.7 at 1,112), 58 to 60 fps
+  in the city with the GPU at 768 MHz.
+- Mark found sys-clk had been holding the GPU at 768 MHz (the docked clock) in handheld for many of our runs. Every
+  log said so at start ("clocks: now cpu 1020, gpu 768, mem 1331 MHz") and I never flagged it (pitfall 48). He set
+  the handheld clock (307 MHz) twice in this run: GPU 22.1 to 22.8 ms a frame at 920 to 1,230 draws, 40 to 42 fps;
+  at 768 MHz the same scenes take 8.3 to 9.6 ms. So at stock handheld clocks the GPU, not the CPU, is the limit,
+  and it needs to drop about a third.
+- Next build (handheld GPU): ZCULL on (the GPU's coarse depth test), and a sweep that, once the city is drawn,
+  cycles every 15 s through: as set, anisotropic filtering off, render 83%, render 67% (the Xbox's 640x480), with a
+  line per phase (GPU ms, fps, draws). Mark plays it at the handheld GPU clock.
+
 ## 2026-11-15 (night): eighth Switch run
 
 - Mark: "definitely the closest we've been". At stock clocks the shift ran 54.5 to 60 fps (10 s windows: 55.6, 54.5,
