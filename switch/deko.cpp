@@ -2133,7 +2133,7 @@ void DekoBackend::Clear(const State& s, uint32_t count, const uint8_t* rects, ui
     // still). On the first frame that clears only depth or stencil, before any draw, after a full frame shown from the
     // other buffer, that full frame is copied into this buffer first, so both hold the same picture.
     if (pause_log_)
-        LOGR("pause log: clear %X of %08X (depth %08X) after %u draws, colour cleared %d", flags, s.rt.data, s.ds.data,
+        LOGR("pause log: clear %X of %08X (depth %08X) after %u draws, colour cleared %d", flags, s.rt.data, s.zs.data,
              frame_draws_, int(frame_colour_cleared_));
     if (!(flags & kClearTarget) && (flags & (kClearZ | kClearStencil)) && !frame_colour_cleared_ && !frame_draws_ &&
         last_full_.data && last_full_.data != s.rt.data) {
