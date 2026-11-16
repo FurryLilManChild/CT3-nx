@@ -18,6 +18,8 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
   render_percent_docked), defaults 83% handheld and 67% docked (720 of 1,080 lines: the pixels of the handheld 100%
   picture, until docked is measured); the menu's Resolution row edits the current mode's. Sweep off. Then a new PGO
   session with this final code: build 12 records, build 13 is the result.
+- Mark: leave ZCULL out (its picture was never checked on its own, and at 83% it is not needed). Off again: at
+  800x600 the GPU should take about 12 ms without it (9.3 with), still well under 16.7. Build 12 rebuilt.
 
 ## 2026-11-15 (night): tenth Switch run (PGO), and the GPU clock
 
