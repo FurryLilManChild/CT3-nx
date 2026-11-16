@@ -20,6 +20,10 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
   which hold the last two frames of play. Fix in deko.cpp Clear (main's RECOMP_PAUSE_HOLD): on the first frame that
   clears only depth or stencil, before any draw, after a full frame shown from the other buffer, that frame is
   copied into this buffer first. Build 9 rebuilt with it before Mark played it, so the PGO session matches.
+- PGO session (build 9): 447 s of play, one 1.1 MB stream, 111 objects (64 of them generated code); the pause hold
+  fired once (03EC2000 into 03D96000). Merged in the cloud with devkitA64's gcov-tool merge-stream (the Wine paths in
+  the stream land in build-switch), pgo.gcda removed, objects deleted, PGO=use build: no coverage-mismatch warning.
+  Build 10 is the result.
 
 ## 2026-11-15 (evening): seventh Switch run
 
