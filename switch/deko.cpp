@@ -758,6 +758,9 @@ private:
     uint32_t sweep_base_pct_ = 100, sweep_base_aniso_ = 0;
     void SweepStep(uint64_t now_ns);
     bool frame_colour_cleared_ = false;
+    // CT3-nx: the pause log (diagnostic, build 13): for 20 frames after the game reads a render target back (it does
+    // at pause), every read-back, upload, clear and present; the first 4 times
+    int pause_log_ = 0, pause_logs_ = 0;
     uint32_t frame_draws_ = 0;
     uint64_t stage_memo_hits_ = 0, stage_memo_misses_ = 0;
     uint64_t sig_bytes_ = 0, tex_uploads_ = 0, tex_upload_bytes_ = 0;
@@ -1408,6 +1411,7 @@ bool DekoBackend::PixelImage(Image& im, const std::vector<uint8_t>& px, uint32_t
 }
 
 void DekoBackend::UploadTarget(Target& t, const Surface& s) {
+    if (pause_log_) LOGR("pause log: upload of the CPU's pixels into %08X", s.data);
     TextureDesc d;
     if (!DescribeSurface(s, d) && !Describe(s.header, d)) return;
     if (Format(d.format).depth) return;
@@ -2128,6 +2132,9 @@ void DekoBackend::Clear(const State& s, uint32_t count, const uint8_t* rects, ui
     // behind the menu shook (Mark, Switch, 2026-11-15; the same on main, PC play tests 17 to 19; his own Xbox holds
     // still). On the first frame that clears only depth or stencil, before any draw, after a full frame shown from the
     // other buffer, that full frame is copied into this buffer first, so both hold the same picture.
+    if (pause_log_)
+        LOGR("pause log: clear %X of %08X (depth %08X) after %u draws, colour cleared %d", flags, s.rt.data, s.ds.data,
+             frame_draws_, int(frame_colour_cleared_));
     if (!(flags & kClearTarget) && (flags & (kClearZ | kClearStencil)) && !frame_colour_cleared_ && !frame_draws_ &&
         last_full_.data && last_full_.data != s.rt.data) {
         Target* from = FindTarget(last_full_, false);
@@ -2229,7 +2236,15 @@ void DekoBackend::SyncLocked(uint32_t data) {
 }
 
 void DekoBackend::SyncLate(uint32_t data) {
-    if (!DeliverLate(data)) Sync(data, 0);
+    if (!pause_log_ && pause_logs_ < 4) {
+        pause_logs_++;
+        pause_log_ = 20;
+        LOGR("pause log: start at present %llu (read-back of %08X)", (unsigned long long)presents_, data);
+    }
+    const bool late = DeliverLate(data);
+    if (pause_log_) LOGR("pause log: read-back of %08X at present %llu: %s", data, (unsigned long long)presents_,
+                         late ? "late copy" : "synchronous");
+    if (!late) Sync(data, 0);
     RecordLate(data);
 }
 
@@ -2248,6 +2263,9 @@ bool DekoBackend::DeliverLate(uint32_t data) {
         if (finished && recent && (best < 0 || l.work[i] > l.work[best])) best = int(i);
     }
     if (best < 0) return false;
+    if (pause_log_)
+        LOGR("pause log: late copy of %08X made at present %llu, now %llu%s", data, (unsigned long long)l.frame[best],
+             (unsigned long long)now, l.work[best] > l.delivered ? "" : " (already delivered)");
     if (l.work[best] > l.delivered) {
         DkMemBlock b = l.rb[best];
         dkMemBlockFlushCpuCache(b, 0, dkMemBlockGetSize(b));
@@ -2677,6 +2695,11 @@ void DekoBackend::Present(const Surface& front) {
     }
     last_present_ns_ = now_ns;
     if (kGpuSweep) SweepStep(now_ns);
+    if (pause_log_) {
+        LOGR("pause log: present %llu of %08X, %u draws, colour cleared %d", (unsigned long long)presents_, front.data,
+             frame_draws_, int(frame_colour_cleared_));
+        pause_log_--;
+    }
     last_full_ = frame_colour_cleared_ ? front : gpu::Surface{};
     frame_colour_cleared_ = false;
     frame_draws_ = 0;

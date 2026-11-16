@@ -60,7 +60,7 @@ anisotropic_filtering = 2
 
 # A/B/X/Y: false (default) = by position, as on an Xbox controller: bottom B = Xbox A, right A = Xbox B,
 # left Y = Xbox X, top X = Xbox Y (the button the game shows sits where you press). true = by letter (A = Xbox A).
-# L and R are the Xbox L and R triggers; ZL and ZR are the Xbox controller's white and black buttons.
+# ZL and ZR are the Xbox triggers (brake and gas); L and R are the Xbox white and black buttons.
 buttons_by_name = false
 
 # Clocks in MHz (0 = the console's own, untouched). Applied at start and when docking or undocking, and the console's

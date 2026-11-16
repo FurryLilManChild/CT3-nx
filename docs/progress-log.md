@@ -2,6 +2,19 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-16: twelfth Switch run (PGO recording), the pause shake, controls
+
+- Build 12 (PGO=generate, ZCULL on, 83% handheld) played 5.5 min at stock clocks (cpu 1020, gpu 307) for
+  session-02.stream (session-01 on the card was build 9's and is not used).
+- Mark: the pause screen shakes again. The log shows the pause hold firing once (336 s) but not at the pause at
+  117 s, and at the moment of each pause the game reads a render target back (read-back blocks made at 117.5 s, as
+  at 109.8 s in run 9). The deko3d backend delivers such reads late (a copy from a frame or two earlier,
+  DeliverLate), so the game's frozen copy may be an older frame than the other buffer holds. Unproven: build 13
+  logs the 20 frames after each read-back (read-backs and which frame they came from, uploads, clears, presents).
+- Mark: the triggers should be gas and brake. Default maps now put ZL and ZR on the Xbox triggers and L and R on
+  white and black (menu.cpp kByPosition, kByName).
+- Build 13: PGO=use from session-02, the controls, the pause log.
+
 ## 2026-11-15 (late night): eleventh Switch run, the handheld GPU sweep
 
 - Handheld GPU clock (307 MHz) set at 9.4 s and kept for the sweep; CPU 1020. ZCULL on the whole run; Mark reported

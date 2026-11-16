@@ -1,8 +1,8 @@
 // controllers through libnx's HID: the handheld Joy-Cons or a pair/Pro Controller as player 1, players 2-4 on their
 // own pads. The face buttons by position by default, as an Xbox pad lies under the hand (MVP throws to the bases by
 // the diamond they make): bottom B is the Xbox A, right A is B, left Y is X, top X is Y. buttons_by_name = true in the
-// settings maps them by letter instead. L and R are the triggers, which the game shows as L and R; ZL and ZR the
-// white and black buttons; + is Start and - is Back. A lone Joy-Con, held sideways, is a pad of its own (ReadSingle):
+// settings maps them by letter instead. CT3-nx: ZL and ZR are the triggers (brake and gas); L and R the white and
+// black buttons (menu.cpp kByPosition); + is Start and - is Back. A lone Joy-Con, held sideways, is a pad of its own (ReadSingle):
 // two players on the console's own pair. + and - together open the system's controllers screen to split or join them.
 #include "core/input.h"
 

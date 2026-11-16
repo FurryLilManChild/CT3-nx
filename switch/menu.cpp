@@ -45,8 +45,10 @@ namespace {
 // Xbox A B X Y black white left trigger right trigger, by the Switch button slot that fills each:
 // slots are A B X Y ZR ZL L R
 const char* const kSlotName[8] = {"A", "B", "X", "Y", "ZR", "ZL", "L", "R"};
-const uint8_t kByPosition[8] = {1, 0, 3, 2, 4, 5, 6, 7};
-const uint8_t kByName[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+// CT3-nx: ZL and ZR are the Xbox triggers (brake and gas), L and R the white and black buttons (Mark, 2026-11-16:
+// the triggers should be gas and brake); slots 4 to 7 are the Xbox black, white, left trigger, right trigger
+const uint8_t kByPosition[8] = {1, 0, 3, 2, 7, 6, 5, 4};
+const uint8_t kByName[8] = {0, 1, 2, 3, 7, 6, 5, 4};
 const uint32_t kRenderPct[] = {50, 67, 75, 83, 100};  // CT3-nx: 83 (800x600 of 640x480), the handheld default
 const uint32_t kAniso[] = {0, 2, 4, 8, 16};
 const uint32_t kVolume[] = {0, 25, 50, 75, 100, 125, 150, 200, 250, 300};
