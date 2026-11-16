@@ -283,3 +283,8 @@ the rule.
     (the late read-back path), but run 12's log showed "read-back" blocks, which only the synchronous Sync path makes;
     the log never ran and the run gave no pause answer. Rule: before placing a diagnostic, find which code path the
     existing log lines prove is taken, and hook that one (or both).
+
+51. **A tree copied from another port brings its branding.** (2026-11-16.) The xbe-recomp branch began as sheroes-nx's
+    tree, renamed in code, but switch/icon.jpg still said SONIC HEROES and shipped in 0.5.0's first package; main had
+    fixed the same thing at its kickoff (pitfall 20). Rule: after copying a port, grep the tree for the old game's name
+    (text and comments) and look at every image (icon, loading logo) before the first build Mark tests.

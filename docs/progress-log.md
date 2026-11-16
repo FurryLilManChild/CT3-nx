@@ -15,6 +15,9 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
 - Mark: release 0.5.0 now; the pause fix and a PGO recording over all three cities can wait. 0.5.0 is build 13
   with the version (switch-0.5.0, NACP 0.5.0) and the README's status, notes saying it plays mostly at 60 fps at
   stock CPU and GPU, with a raised GPU clock recommended for a fully smooth 60.
+- Mark: the icon looked wrong. It was Sonic Heroes' (switch/icon.jpg came over with the sheroes-nx tree at the
+  branch's first commit; main had the Crazy Taxi 3 one since c7b3cf6). Now main's icon; the settings file's clock note
+  no longer speaks of Sonic Heroes. 0.5.0 rebuilt and repackaged (pitfall 51).
 
 ## 2026-11-16: twelfth Switch run (PGO recording), the pause shake, controls
 

@@ -66,8 +66,8 @@ buttons_by_name = false
 # Clocks in MHz (0 = the console's own, untouched). Applied at start and when docking or undocking, and the console's
 # are restored on exit. Caps: CPU 1785, GPU 921, memory 1600 (the official maximums).
 # Stock: CPU 1020; GPU 307-460 handheld and 768 docked; memory 1331 handheld and 1600 docked.
-# Higher clocks use more battery and run hotter. Sonic Heroes runs at 60 fps at stock clocks on this runtime: the port menu's CPU
-# boost is there for any part that does not.
+# Higher clocks use more battery and run hotter. Crazy Taxi 3 runs at or near 60 fps at stock clocks; a higher GPU clock
+# (gpu_mhz below, or sys-clk) smooths the busiest parts of the cities.
 # If you use Horizon OC or sys-clk, leave these at 0 and set the clocks in its profile for this game.
 cpu_mhz = 0
 gpu_mhz = 0
