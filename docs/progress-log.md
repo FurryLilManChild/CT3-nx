@@ -15,6 +15,11 @@ The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/
 - Next (Switch speed, the brextreme-nx and sa2-nx last step): PGO. Build 9 is the instrumented NRO (PGO=generate,
   counters to sdmc:/switch/ct3/pgo/ every minute); Mark plays 10 minutes or more through every city; the merged
   profile builds build 10 (PGO=use). brextreme-nx measured about 6% from PGO.
+- Mark: the pause screen shakes again on the Switch (fixed on main in PC play tests 17 to 19). Cause as on main:
+  the pause menu is drawn over the last picture without a colour clear, into each of the two buffers in turn,
+  which hold the last two frames of play. Fix in deko.cpp Clear (main's RECOMP_PAUSE_HOLD): on the first frame that
+  clears only depth or stencil, before any draw, after a full frame shown from the other buffer, that frame is
+  copied into this buffer first. Build 9 rebuilt with it before Mark played it, so the PGO session matches.
 
 ## 2026-11-15 (evening): seventh Switch run
 

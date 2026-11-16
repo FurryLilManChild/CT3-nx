@@ -747,6 +747,11 @@ private:
     uint64_t phase_ns_[kPhases] = {};
     uint64_t const_reused_ = 0, const_uploaded_ = 0, upload_bytes_ = 0;
     uint64_t draw_kind_[4] = {};  // CT3-nx: vertex program, fixed unlit, fixed lit, fixed blended (unlit)
+    // CT3-nx: the pause hold (main's RECOMP_PAUSE_HOLD, nv2a_pb_exec.c, 2026-11-06): the frame just shown when it
+    // cleared its colour (a full frame), and whether this frame has cleared colour or drawn yet
+    gpu::Surface last_full_{};
+    bool frame_colour_cleared_ = false;
+    uint32_t frame_draws_ = 0;
     uint64_t stage_memo_hits_ = 0, stage_memo_misses_ = 0;
     uint64_t sig_bytes_ = 0, tex_uploads_ = 0, tex_upload_bytes_ = 0;
     uint32_t check_frames_ = 1;
@@ -1880,6 +1885,7 @@ void DekoBackend::BindState(const State& s, const Assembled& a, const DrawShader
 
 void DekoBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
     DK_GATE();
+    frame_draws_++;
     if (DepthCopy(s)) return;
     uint64_t t = TickNs(), t2;
     auto phase = [&](Phase p) {
@@ -2089,6 +2095,7 @@ void DekoBackend::ClearTarget(Target& t, const State& s, uint32_t count, const u
             dkCmdBufClearDepthStencil(Cb(), cz, std::clamp(z, 0.0f, 1.0f), cs ? 0xFF : 0, uint8_t(stencil));
         }
     } else {
+        frame_colour_cleared_ = true;
         if (LatchCpuWrite(t)) UploadTarget(t, s.rt);
         float c[4];
         Color(color, c);
@@ -2104,6 +2111,31 @@ void DekoBackend::ClearTarget(Target& t, const State& s, uint32_t count, const u
 void DekoBackend::Clear(const State& s, uint32_t count, const uint8_t* rects, uint32_t flags, uint32_t color, float z,
                         uint32_t stencil) {
     DK_GATE();
+    // CT3-nx: the pause screen. Crazy Taxi 3 draws its pause menu over the last picture without clearing colour,
+    // each frame into the other of its two buffers, which hold the last two frames of play: shown in turn, the picture
+    // behind the menu shook (Mark, Switch, 2026-11-15; the same on main, PC play tests 17 to 19; his own Xbox holds
+    // still). On the first frame that clears only depth or stencil, before any draw, after a full frame shown from the
+    // other buffer, that full frame is copied into this buffer first, so both hold the same picture.
+    if (!(flags & kClearTarget) && (flags & (kClearZ | kClearStencil)) && !frame_colour_cleared_ && !frame_draws_ &&
+        last_full_.data && last_full_.data != s.rt.data) {
+        Target* from = FindTarget(last_full_, false);
+        Target* to = EnsureTarget(s.rt, false);
+        from = FindTarget(last_full_, false);  // EnsureTarget can move the map's entries
+        if (from && to && from != to && from->drawn && from->w == to->w && from->h == to->h &&
+            from->img.fmt == to->img.fmt) {
+            BeforeCopy(&from->img, &to->img);
+            DkImageView sv, dv;
+            View(from->img, sv, true);
+            View(to->img, dv, true);
+            const DkImageRect r = {0, 0, 0, from->w, from->h, 1};
+            dkCmdBufCopyImage(Cb(), &sv, &r, &dv, &r, 0);
+            AfterCopy(to->img);
+            to->drawn = true;
+            static unsigned logged = 0;
+            if (logged++ < 8) LOGR("deko3d: pause hold: copied the last full frame %08X into %08X", last_full_.data, s.rt.data);
+        }
+        last_full_ = {};
+    }
     Target* rt = (flags & kClearTarget) ? EnsureTarget(s.rt, false) : nullptr;
     Target* ds = (flags & (kClearZ | kClearStencil)) ? EnsureTarget(s.zs, true) : nullptr;
     for (Target* t : {rt, ds})
@@ -2598,6 +2630,9 @@ void DekoBackend::Present(const Surface& front) {
         }
     }
     last_present_ns_ = now_ns;
+    last_full_ = frame_colour_cleared_ ? front : gpu::Surface{};
+    frame_colour_cleared_ = false;
+    frame_draws_ = 0;
     Target* t = EnsureTarget(front, false);
     if (t && LatchCpuWrite(*t)) UploadTarget(*t, front);
     Image* shown = t ? &t->img : nullptr;

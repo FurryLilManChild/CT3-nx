@@ -261,3 +261,8 @@ the rule.
     ShaolinMonks-NX, on the same toolchain, keeps its renderer alone on a core. Rule: when the render or title
     thread is the limit, read the thread placement in the log first, and read the sibling ports' READMEs at the
     first profile, not after the fifth.
+
+47. **A renderer swap drops the old renderer's game fixes.** (2026-11-15.) Main fixed the shaking pause screen in its
+    NV2A executor (RECOMP_PAUSE_HOLD); this branch's deko3d backend never got it, and Mark found it again. Same lesson
+    as pitfall 41, for the renderer: when moving to a new backend, list the old one's game-specific fixes (main's
+    progress log, "Fix (nv2a_...)") and carry each over or show why it is not needed.
