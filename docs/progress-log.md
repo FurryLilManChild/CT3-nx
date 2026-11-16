@@ -2,6 +2,23 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15 (late night): eleventh Switch run, the handheld GPU sweep
+
+- Handheld GPU clock (307 MHz) set at 9.4 s and kept for the sweep; CPU 1020. ZCULL on the whole run; Mark reported
+  nothing wrong on screen.
+- GPU ms a frame in the city by phase (15 s each, draws a frame in brackets):
+  - as set (960x720, anisotropic 2): 17.4 (1,075), 18.2 (1,264), 17.5 (1,028). Run 10 at the same clock with ZCULL
+    off: 22.1 to 22.8. ZCULL cut the GPU's time by about a fifth.
+  - anisotropic off: 18.0 (1,277), 16.4 (669), 17.8 (894): no gain.
+  - render 83% (800x600): 9.3 (1,281), 9.3 (923): about half, more than the pixel count (0.69) would give.
+  - render 67% (640x480): 4.7 (907), 4.7 (684).
+  At 83% the frame rate was 56.5 to 58 with the render thread the limit again (deko.cpp lost part of its PGO
+  profile to the sweep's changes: about 15 ms at 1,300 draws).
+- Decision for the next builds: ZCULL stays on; the resolution has a handheld and a docked setting (render_percent,
+  render_percent_docked), defaults 83% handheld and 67% docked (720 of 1,080 lines: the pixels of the handheld 100%
+  picture, until docked is measured); the menu's Resolution row edits the current mode's. Sweep off. Then a new PGO
+  session with this final code: build 12 records, build 13 is the result.
+
 ## 2026-11-15 (night): tenth Switch run (PGO), and the GPU clock
 
 - PGO worked on the CPU side: render thread about 11 us a draw (12.4 ms at 1,051 draws, 12.7 at 1,112), 58 to 60 fps

@@ -34,6 +34,8 @@ void RestoreClocks();  // the system's clocks back
 void WatchClocks();    // from the main loop: the asked clocks set again if something changed them
 // core_layout in the settings: ct3_place_thread (cores.cpp) pins the title, render and other threads
 bool CoreLayout();
+// CT3-nx: the output is docked (the real mode, or ReverseNX-RT's pick): the resolution setting that applies
+bool Docked();
 // CT3_PGO=generate builds only (pgo.cpp): the profile streams on the SD; nothing in other builds
 void PgoStart();
 void PgoDump(bool now);  // now = false: only when a minute has gone by since the last

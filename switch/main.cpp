@@ -82,6 +82,8 @@ bool g_smaa = false;
 }  // namespace
 
 namespace host {
+
+bool Docked() { return g_docked; }
 bool ButtonsByName() { return g_buttons_by_name; }
 void SetButtonsByName(bool on) { g_buttons_by_name = on; }  // the port menu
 void SetSmaa(bool on) { g_smaa = on; }                      // the port menu
@@ -102,6 +104,7 @@ toml::table Table() {
     const Settings& s = Get();
     // display_mode, width and height mean nothing on the Switch: the screen's size is the output
     toml::table t{{"render_percent", int64_t(s.render_percent)},
+                  {"render_percent_docked", int64_t(s.render_percent_docked)},
                   {"fps_cap", int64_t(s.fps_cap)},
                   {"vsync", s.vsync},
                   {"xbox_720p", s.xbox_720p},
@@ -136,7 +139,11 @@ toml::table Table() {
 // the Switch starts at the console's own pace: 30 frames a second, vsync on, the frame at the screen's height
 Settings DefaultSettings() {
     Settings s;
-    s.render_percent = 100;
+    // CT3-nx: 83% handheld (800x600 for the 640x480 game): at the handheld GPU clock (307 MHz) the GPU took 17.4 to
+    // 18.2 ms a frame at 100% (960x720) and 9.3 at 83% in the city (eleventh Switch run, ZCULL on). Docked 67%
+    // (720 lines of 1080, the handheld 100% picture's pixels) until docked is measured.
+    s.render_percent = 83;
+    s.render_percent_docked = 67;
     s.fps_cap = 60;
     s.vsync = true;
     s.xbox_720p = false;  // stock 480 Xbox until 720p is tried on this title
@@ -168,6 +175,7 @@ void Load() {
         return;
     }
     s.render_percent = t["render_percent"].value_or(s.render_percent);
+    s.render_percent_docked = t["render_percent_docked"].value_or(s.render_percent_docked);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.xbox_720p = t["xbox_720p"].value_or(s.xbox_720p);
@@ -251,7 +259,7 @@ bool Widescreen() {
 }
 
 float RenderScale(uint32_t guest_height) {
-    float h = Output().height * (Get().render_percent / 100.0f);
+    float h = Output().height * ((g_docked ? Get().render_percent_docked : Get().render_percent) / 100.0f);
     return guest_height ? std::max(h / guest_height, 0.1f) : 1.0f;
 }
 

@@ -752,7 +752,7 @@ private:
     gpu::Surface last_full_{};
     // CT3-nx: the handheld GPU sweep (diagnostic, build 11): once the city is drawn, every 15 s the next of four
     // settings, and per phase the average GPU time, draws and frames; kGpuSweep off for normal builds
-    static constexpr bool kGpuSweep = true;
+    static constexpr bool kGpuSweep = false;
     int sweep_phase_ = -1;
     uint64_t sweep_start_ns_ = 0, sweep_gpu_ns_ = 0, sweep_gpu_works_ = 0, sweep_frames_ = 0, sweep_draws_ = 0;
     uint32_t sweep_base_pct_ = 100, sweep_base_aniso_ = 0;

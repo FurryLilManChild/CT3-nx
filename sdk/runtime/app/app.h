@@ -19,6 +19,7 @@ struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
     uint32_t render_percent = 100;   // of the output height
+    uint32_t render_percent_docked = 100;  // CT3-nx: the Switch docked (render_percent is handheld there)
     uint32_t fps_cap = 60;           // 0 unlimited
     bool vsync = true;
     bool xbox_720p = false;         // advertise guest 720p; independent of host output size

@@ -47,7 +47,7 @@ namespace {
 const char* const kSlotName[8] = {"A", "B", "X", "Y", "ZR", "ZL", "L", "R"};
 const uint8_t kByPosition[8] = {1, 0, 3, 2, 4, 5, 6, 7};
 const uint8_t kByName[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-const uint32_t kRenderPct[] = {50, 67, 75, 100};
+const uint32_t kRenderPct[] = {50, 67, 75, 83, 100};  // CT3-nx: 83 (800x600 of 640x480), the handheld default
 const uint32_t kAniso[] = {0, 2, 4, 8, 16};
 const uint32_t kVolume[] = {0, 25, 50, 75, 100, 125, 150, 200, 250, 300};
 constexpr uint32_t kBoostMhz = 1785;
@@ -152,8 +152,8 @@ void RowText(int r, const char*& label, char* val, size_t vn, const char*& note)
             break;
         case R_TITLE_DISP: label = "DISPLAY AND SOUND"; break;
         case R_SCALE:
-            label = "Resolution";
-            std::snprintf(val, vn, "%u%%", s.render_percent);
+            label = host::Docked() ? "Resolution (docked)" : "Resolution (handheld)";
+            std::snprintf(val, vn, "%u%%", host::Docked() ? s.render_percent_docked : s.render_percent);
             note = "Of the screen's height. Lower is faster";
             break;
         case R_ANISO:
@@ -215,7 +215,11 @@ void Change(int r, int d) {
         case R_INV_X: ct3::g_invert_x = !ct3::g_invert_x; break;
         case R_INV_Y: ct3::g_invert_y = !ct3::g_invert_y; break;
         case R_STICK: ct3::g_stick_response = uint32_t(Wrap(int(std::min<uint32_t>(ct3::g_stick_response, 2)), d, 3)); break;
-        case R_SCALE: s.render_percent = kRenderPct[Wrap(IndexOf(kRenderPct, Count(kRenderPct), s.render_percent), d, Count(kRenderPct))]; break;
+        case R_SCALE: {
+            uint32_t& pct = host::Docked() ? s.render_percent_docked : s.render_percent;
+            pct = kRenderPct[Wrap(IndexOf(kRenderPct, Count(kRenderPct), pct), d, Count(kRenderPct))];
+            break;
+        }
         case R_ANISO: s.aniso = kAniso[Wrap(IndexOf(kAniso, Count(kAniso), s.aniso), d, Count(kAniso))]; break;
         case R_SMAA: SetSmaa(!host::Smaa()); break;
         case R_FPS: ct3::g_fps_counter = !ct3::g_fps_counter; break;
@@ -232,7 +236,8 @@ void Defaults() {
     ct3::g_invert_x = ct3::g_invert_y = false;
     ct3::g_stick_response = 0;
     ct3::g_fps_counter = false;
-    s.render_percent = 100;
+    s.render_percent = 83;  // CT3-nx: the handheld and docked defaults (main.cpp DefaultSettings)
+    s.render_percent_docked = 67;
     s.aniso = 2;
     SetSmaa(false);
     xdk::g_music_pct = xdk::g_effects_pct = 100;

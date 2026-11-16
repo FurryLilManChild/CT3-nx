@@ -3,8 +3,10 @@
 # The Switch has no display_mode, width or height: the resolution is the screen's
 # (1280x720 handheld, 1920x1080 docked).
 
-# Internal resolution in % of the screen's height (100 = native). Lower it (75, say) if the game is slow.
-render_percent = 100
+# Internal resolution in % of the screen's height (100 = native), handheld and docked. 83 handheld draws the game at
+# 800x600 (100 would be 960x720), which the handheld GPU holds at 60 fps; 67 docked draws 720 lines of the 1080.
+render_percent = 83
+render_percent_docked = 67
 
 # Frame rate cap (0 = none). 60 by default.
 # The log writes the real frame rate every 10 s ("perf:" lines).
