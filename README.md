@@ -8,14 +8,24 @@ You need your own copy of the game. No game files are in this repository or its 
 
 ## Status
 
-**In development, not yet booted on this branch.** This branch moves the port from xboxrecomp (the `main` branch:
-plays, 30 to 47 fps on the Switch) onto XboxXBE-Recomp, the toolchain that took Sonic Heroes (sheroes-nx) to 60 fps
-at the Switch's stock clocks. Crazy Taxi 3 uses an older Xbox SDK (4531) than any game the toolchain had run, so this
-branch adds support for it.
+**0.5.0: playable.** Every shift in all three cities (West Coast, Small Apple, Glitter Oasis) plays from start to
+finish. At the Switch's stock clocks (CPU 1020 MHz, handheld GPU 307 MHz) it runs at or near 60 fps most of the time,
+with dips into the 50s in the busiest parts of Small Apple. For a fully smooth 60 fps, raise the GPU clock (with
+sys-clk, for example; the docked clock, 768 MHz, holds 60 in handheld).
+
+This branch moved the port from xboxrecomp (the `main` branch: 30 to 47 fps on the Switch) onto XboxXBE-Recomp, the
+toolchain that runs Sonic Heroes (sheroes-nx). Crazy Taxi 3 uses an older Xbox SDK (4531) than any game the toolchain
+had run, so this branch adds support for it.
+
+Known issues in 0.5.0:
+- The picture behind the pause menu shakes in Glitter Oasis and Small Apple (not in West Coast).
+- Docked play has not been measured yet; its resolution starts at 67% (720 of 1080 lines) to be safe.
+- The first time an effect appears, its shader is built and the game stalls briefly. Shaders are saved on the SD card
+  (`switch/ct3/shadercache/`), so this fades after the first plays.
 
 Session-by-session notes: [docs/progress-log.md](docs/progress-log.md).
 
-## Install (Switch, once there is a build)
+## Install (Switch)
 
 1. Copy `ct3.nro` and `ct3-settings.toml` to `switch/ct3/` on the SD card.
 2. Put your game in `switch/ct3/game/`: the trimmed disc image (`.iso`, recommended) or the extracted disc
@@ -32,6 +42,9 @@ Saves go to `switch/ct3/hdd/`; logs to `switch/ct3/logs/`.
 
 Press **+ and -** together to open it. Up and down choose a row, left and right change it (A too), B saves and
 closes. Settings are saved to `ct3-settings.toml` next to the program.
+
+The Resolution row is kept separately for handheld (default 83%: the game drawn at 800x600) and docked (default 67%);
+it changes the one for the mode you are in. Lower is faster. Controls: ZR is gas, ZL is brake.
 
 ## Building
 

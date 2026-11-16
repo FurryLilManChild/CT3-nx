@@ -2,6 +2,20 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-16: thirteenth Switch run, and 0.5.0
+
+- Build 13 (PGO from session-02, triggers on ZL and ZR) at stock clocks (cpu 1020, gpu 307): 5.5 min, mostly 57 to
+  60 fps, lowest 49.5 to 55 near the end (Small Apple, by Mark's account). Mark: "speed is great", controls right.
+- Pause: the hold fired at both pauses (81.6 s, 160.3 s), yet Mark saw the shake in Glitter Oasis and Small Apple,
+  not West Coast. The pause log never ran: the game reads its surfaces through BlockOnResource (Sync, synchronous),
+  not the late path the log watched (pitfall 50). At each pause the game reads a surface back just before the hold
+  copies (81.541 read, 81.555 hold): likely it darkens the frozen picture on the CPU from a buffer that still held
+  the older frame, and that upload replaces the hold's copy. Proposed fix (not built): do the hold's copy when the
+  game reads a not yet drawn surface at the start of a frame, before the read.
+- Mark: release 0.5.0 now; the pause fix and a PGO recording over all three cities can wait. 0.5.0 is build 13
+  with the version (switch-0.5.0, NACP 0.5.0) and the README's status, notes saying it plays mostly at 60 fps at
+  stock CPU and GPU, with a raised GPU clock recommended for a fully smooth 60.
+
 ## 2026-11-16: twelfth Switch run (PGO recording), the pause shake, controls
 
 - Build 12 (PGO=generate, ZCULL on, 83% handheld) played 5.5 min at stock clocks (cpu 1020, gpu 307) for

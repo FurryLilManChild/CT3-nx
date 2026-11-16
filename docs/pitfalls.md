@@ -278,3 +278,8 @@ the rule.
     was still open; Mark then dropped ZCULL, I rebuilt, he kept it, and it was rebuilt again. Mark: do not build
     anything until what goes in the build is final. Rule: present the plan, wait until he agrees on every item, then
     build.
+
+50. **Hook a diagnostic on the path the log already showed.** (2026-11-16.) Build 13's pause log started in SyncLate
+    (the late read-back path), but run 12's log showed "read-back" blocks, which only the synchronous Sync path makes;
+    the log never ran and the run gave no pause answer. Rule: before placing a diagnostic, find which code path the
+    existing log lines prove is taken, and hook that one (or both).
