@@ -2,6 +2,20 @@
 
 The xboxrecomp version's log (2026-10-28 to 2026-11-09) is `docs/xboxrecomp-era/progress-log.md`.
 
+## 2026-11-15 (night): eighth Switch run
+
+- Mark: "definitely the closest we've been". At stock clocks the shift ran 54.5 to 60 fps (10 s windows: 55.6, 54.5,
+  59.9, 59.8, 59.8, 57.6, 57.7, 60.1); render thread 11.6 to 16.6 ms at 820 to 1,190 draws. No shader compiled in
+  the whole run: the card's cache (223 modules) now holds everything this route uses, so the hitches are gone.
+- Draws by kind in the city: 450 to 560 unlit, 550 to 630 lit, 12 to 30 vertex program, about 1 blended. The unlit
+  trim cut uploads from 2.9 to 2.0 MB a frame.
+- Instancing census: 0 draws repeat the one before but for their placement. Each model comes from its own push
+  data or vertex shader input, so Cold Fear's technique (same vertex pointers, same state) has nothing to merge
+  here. The census is taken out again.
+- Next (Switch speed, the brextreme-nx and sa2-nx last step): PGO. Build 9 is the instrumented NRO (PGO=generate,
+  counters to sdmc:/switch/ct3/pgo/ every minute); Mark plays 10 minutes or more through every city; the merged
+  profile builds build 10 (PGO=use). brextreme-nx measured about 6% from PGO.
+
 ## 2026-11-15 (evening): seventh Switch run
 
 - Sound fine as far as Mark could tell (low volume). Threads placed as planned (title core 0, render core 1).
